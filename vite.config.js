@@ -14,6 +14,10 @@ export default defineConfig({
   optimizeDeps: {
     include: ['pdfjs-dist'],
   },
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+  },
   server: {
     proxy: {
       '/google-api': {
