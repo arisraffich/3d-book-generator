@@ -112,7 +112,15 @@ async function pollPrediction(predictionId, onProgress) {
     const prediction = await response.json()
 
     if (prediction.status === 'succeeded') {
-      return prediction.output
+      // Replicate output can be a string URL or array of URLs
+      if (typeof prediction.output === 'string') {
+        return prediction.output
+      } else if (Array.isArray(prediction.output) && prediction.output.length > 0) {
+        return prediction.output[0]
+      } else if (prediction.output && prediction.output.url) {
+        return prediction.output.url
+      }
+      throw new Error('Unexpected output format from Replicate API')
     }
 
     if (prediction.status === 'failed' || prediction.status === 'canceled') {
