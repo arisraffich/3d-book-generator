@@ -171,7 +171,7 @@ export async function generateOpeningVideo(generatedImages, onProgress) {
     duration: 2,
     resolution: '1080p',
     aspect_ratio: '1:1',
-    fps: 30,
+    fps: 24,
     camera_fixed: false
   }
 
@@ -210,7 +210,7 @@ export async function generateFlipVideo(startSpread, endSpread, onProgress) {
     duration: 3,
     resolution: '1080p',
     aspect_ratio: '1:1',
-    fps: 30,
+    fps: 24,
     camera_fixed: false
   }
 
