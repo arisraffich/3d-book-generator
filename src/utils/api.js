@@ -36,6 +36,9 @@ Eye-level perspective with slight downward angle
 Position the book to occupy approximately 60-70% of the frame
 Maintain crisp focus on the book cover with gentle background blur for visual separation
 
+Output Requirements:
+CRITICAL: The final image MUST be square (1:1 aspect ratio). Frame the composition to fit perfectly within a square format. Adjust the book positioning and framing as needed to ensure the entire image is square with equal width and height.
+
 Output Style: The final render should resemble premium product photography for a publisher's catalog—clean, professional, inviting, and emphasizing the book's physical quality and cover design artistry.`
 
 const PROMPT_2_FIRST_INTERIOR = `Create a photorealistic 3D render of an open book showing two interior pages, using the provided 3D book cover as a reference for style, environment, and physical properties.
@@ -54,6 +57,9 @@ Pages should have photorealistic lighting that creates soft shadows in the spine
 ALWAYS depict text page on the left and image page on the right 
 The book should fill 70-80% of the frame with even margins around all edges
 Keep the horizon line level and straight—no diagonal or skewed compositions
+
+Output Requirements:
+CRITICAL: The final image MUST be square (1:1 aspect ratio). Ensure the composition fits perfectly within a square frame. Adjust the book positioning and camera framing as needed so the output image is exactly square with equal width and height.
 
 Environment Matching:
 Use the identical gradient background colors and tones from the provided 3D book cover reference
@@ -81,6 +87,7 @@ Page texture and paper quality
 Environmental atmosphere and studio setting
 Margins and framing (book fills 70-80% of frame)
 Overall composition and spatial layout
+Square (1:1) aspect ratio format
 
 What Changes:
 Apply the left page flat image (#2) onto the left page of the open book
@@ -174,10 +181,7 @@ async function generateImage(prompt, images = {}) {
     const payload = {
       contents: [{
         parts: parts
-      }],
-      generationConfig: {
-        aspectRatio: "1:1"
-      }
+      }]
     }
 
     const fullUrl = `${API_URL}${endpoint}?key=${API_KEY}`
