@@ -1,7 +1,13 @@
 import { saveToIndexedDB, loadFromIndexedDB } from './indexedDB'
 
 const REPLICATE_API_KEY = import.meta.env.VITE_REPLICATE_API_KEY
-const REPLICATE_API_URL = 'https://api.replicate.com/v1'
+const REPLICATE_API_BASE_URL = 'https://api.replicate.com/v1'
+
+// Use proxy in development to avoid CORS, direct URL in production
+const REPLICATE_API_URL = import.meta.env.DEV 
+  ? '/replicate-api/v1'  // Use Vite proxy in development
+  : REPLICATE_API_BASE_URL
+
 const MODEL = 'bytedance/seedance-1-pro'
 
 // Prompts
