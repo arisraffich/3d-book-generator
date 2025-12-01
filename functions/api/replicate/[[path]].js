@@ -1,3 +1,4 @@
+// Cloudflare Function to proxy Replicate API requests and add CORS headers
 export async function onRequest(context) {
   const { request, env } = context
   const url = new URL(request.url)
