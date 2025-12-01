@@ -198,9 +198,10 @@ function App() {
 
     try {
       let result
+      const currentImages = generatedImages // Ensure we have the latest images
       
       if (videoId === 'opening') {
-        result = await generateOpeningVideo(generatedImages)
+        result = await generateOpeningVideo(currentImages)
       } else {
         // Parse video ID (e.g., "spread-1-2" -> spread 1 and 2)
         const match = videoId.match(/spread-(\d+)-(\d+)/)
@@ -211,9 +212,13 @@ function App() {
         const startSpreadKey = `spread-${startSpreadNum}`
         const endSpreadKey = `spread-${startSpreadNum + 1}`
         
+        if (!currentImages[startSpreadKey] || !currentImages[endSpreadKey]) {
+          throw new Error('Required images not found for this video')
+        }
+        
         result = await generateFlipVideo(
-          generatedImages[startSpreadKey],
-          generatedImages[endSpreadKey]
+          currentImages[startSpreadKey],
+          currentImages[endSpreadKey]
         )
       }
 
