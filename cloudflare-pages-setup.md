@@ -25,7 +25,7 @@ Add these environment variables in Cloudflare Pages:
 2. Add these variables:
 
    - **Variable name:** `VITE_NANO_BANANA_API_KEY`
-   - **Value:** `AIzaSyAkAKUQVjqBBAT2jF2_Y_MZyWgcR1X9Wh0`
+   - **Value:** `YOUR_API_KEY_HERE` (get this from Google Cloud Console)
    - **Environment:** Production, Preview, and Development
 
    - **Variable name:** `VITE_NANO_BANANA_API_URL`
