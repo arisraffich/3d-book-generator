@@ -45,7 +45,8 @@ async function getModelVersion() {
     throw new Error('Replicate API key not configured. Please set VITE_REPLICATE_API_KEY in .env')
   }
 
-  const response = await fetch(`${REPLICATE_API_URL}/models/${MODEL}/versions`, {
+  // Get model info - this endpoint includes latest_version
+  const response = await fetch(`${REPLICATE_API_URL}/models/${MODEL}`, {
     headers: {
       'Authorization': `Token ${REPLICATE_API_KEY}`,
       'Content-Type': 'application/json'
@@ -53,15 +54,18 @@ async function getModelVersion() {
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch model versions: ${response.status}`)
+    const errorText = await response.text()
+    throw new Error(`Failed to fetch model: ${response.status} - ${errorText}`)
   }
 
-  const data = await response.json()
-  // Return the latest version (first in the list)
-  if (data.results && data.results.length > 0) {
-    return data.results[0].id
+  const modelData = await response.json()
+  
+  // Extract latest version ID from model.latest_version.id
+  if (modelData.latest_version && modelData.latest_version.id) {
+    return modelData.latest_version.id
   }
-  throw new Error('No model versions found')
+  
+  throw new Error('No latest version found in model data')
 }
 
 // Create a prediction on Replicate
