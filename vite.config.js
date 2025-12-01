@@ -35,7 +35,7 @@ export default defineConfig({
               target: 'https://api.replicate.com',
               changeOrigin: true,
               secure: true,
-              rewrite: (path) => path.replace(/^\/replicate-api/, ''),
+              rewrite: (path) => path.replace(/^\/replicate-api\/v1/, '/v1'),
               configure: (proxy, _options) => {
                 proxy.on('error', (err, _req, res) => {
                   console.log('proxy error', err);
