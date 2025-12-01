@@ -3,7 +3,8 @@ function GenerationDashboard({
   generatedImages,
   isGenerating,
   progress,
-  onUploadNew
+  onUploadNew,
+  onStartVideoGeneration
 }) {
   function getStatusIcon(status) {
     switch (status) {
@@ -94,9 +95,14 @@ function GenerationDashboard({
             </ul>
             Check your Downloads folder
           </div>
-          <button className="button" onClick={onUploadNew}>
-            🔄 Generate Another Book
-          </button>
+          <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
+            <button className="button" onClick={onStartVideoGeneration}>
+              🎬 Generate Videos
+            </button>
+            <button className="button secondary" onClick={onUploadNew}>
+              📚 Upload Another Book
+            </button>
+          </div>
         </div>
       </div>
     )

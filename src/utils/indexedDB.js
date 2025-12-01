@@ -1,16 +1,23 @@
 import { openDB } from 'idb'
 
 const DB_NAME = 'BookGeneratorDB'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 async function getDB() {
   return await openDB(DB_NAME, DB_VERSION, {
-    upgrade(db) {
-      if (!db.objectStoreNames.contains('extractedPages')) {
-        db.createObjectStore('extractedPages')
+    upgrade(db, oldVersion) {
+      if (oldVersion < 1) {
+        if (!db.objectStoreNames.contains('extractedPages')) {
+          db.createObjectStore('extractedPages')
+        }
+        if (!db.objectStoreNames.contains('generatedImages')) {
+          db.createObjectStore('generatedImages')
+        }
       }
-      if (!db.objectStoreNames.contains('generatedImages')) {
-        db.createObjectStore('generatedImages')
+      if (oldVersion < 2) {
+        if (!db.objectStoreNames.contains('generatedVideos')) {
+          db.createObjectStore('generatedVideos')
+        }
       }
     }
   })

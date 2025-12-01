@@ -2,19 +2,28 @@ import { useState, useEffect } from 'react'
 import UploadArea from './components/UploadArea'
 import PreviewDashboard from './components/PreviewDashboard'
 import GenerationDashboard from './components/GenerationDashboard'
+import VideoGenerationDashboard from './components/VideoGenerationDashboard'
 import { loadFromIndexedDB } from './utils/indexedDB'
 import { generateAllImages } from './utils/api'
 import { downloadImage } from './utils/download'
+import { generateAllVideos, downloadVideo, generateOpeningVideo, generateFlipVideo } from './utils/video'
 
 function App() {
-  const [currentPhase, setCurrentPhase] = useState('upload') // 'upload' | 'preview' | 'generating' | 'complete'
+  const [currentPhase, setCurrentPhase] = useState('upload') // 'upload' | 'preview' | 'generating' | 'complete' | 'generating-videos' | 'videos-complete'
   const [extractedPages, setExtractedPages] = useState({})
   const [generatedImages, setGeneratedImages] = useState({})
+  const [generatedVideos, setGeneratedVideos] = useState({})
   const [isProcessing, setIsProcessing] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState(0)
   const [extractionMessage, setExtractionMessage] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationProgress, setGenerationProgress] = useState({
+    current: 0,
+    total: 0,
+    status: {}
+  })
+  const [isGeneratingVideos, setIsGeneratingVideos] = useState(false)
+  const [videoProgress, setVideoProgress] = useState({
     current: 0,
     total: 0,
     status: {}
@@ -29,6 +38,7 @@ function App() {
     try {
       const savedPages = await loadFromIndexedDB('extractedPages')
       const savedImages = await loadFromIndexedDB('generatedImages')
+      const savedVideos = await loadFromIndexedDB('generatedVideos')
       
       if (savedPages && Object.keys(savedPages).length > 0) {
         setExtractedPages(savedPages)
@@ -37,6 +47,25 @@ function App() {
       
       if (savedImages && Object.keys(savedImages).length > 0) {
         setGeneratedImages(savedImages)
+      }
+
+      if (savedVideos && Object.keys(savedVideos).length > 0) {
+        setGeneratedVideos(savedVideos)
+        // If videos exist, show video dashboard
+        const videoCount = Object.keys(savedVideos).length
+        const spreadCount = Object.keys(savedImages).filter(k => k.startsWith('spread-')).length
+        const expectedVideoCount = spreadCount
+        if (videoCount === expectedVideoCount && expectedVideoCount > 0) {
+          setCurrentPhase('videos-complete')
+          setVideoProgress({
+            current: videoCount,
+            total: expectedVideoCount,
+            status: Object.keys(savedVideos).reduce((acc, key) => {
+              acc[key] = 'complete'
+              return acc
+            }, {})
+          })
+        }
       }
     } catch (error) {
       console.error('Error loading saved data:', error)
@@ -113,15 +142,140 @@ function App() {
     setGenerationProgress(progress)
   }
 
+  async function handleStartVideoGeneration() {
+    setCurrentPhase('generating-videos')
+    setIsGeneratingVideos(true)
+
+    const spreadCount = Object.keys(generatedImages).filter(k => k.startsWith('spread-')).length
+    const totalVideos = spreadCount // Opening + (spreads - 1) flips
+
+    setVideoProgress({
+      current: 0,
+      total: totalVideos,
+      status: {}
+    })
+
+    try {
+      const videos = await generateAllVideos(
+        generatedImages,
+        (progressUpdate) => {
+          setVideoProgress(progressUpdate)
+        },
+        async (videoId, videoUrl, videoInfo) => {
+          // Auto-download each generated video
+          try {
+            await downloadVideo(videoUrl, videoInfo.filename)
+          } catch (error) {
+            console.error('Video download error:', error)
+          }
+        }
+      )
+
+      setGeneratedVideos(videos)
+      setIsGeneratingVideos(false)
+      setCurrentPhase('videos-complete')
+    } catch (error) {
+      console.error('Video generation error:', error)
+      alert('Failed to generate videos. Please check your Replicate API key and try again.')
+      setIsGeneratingVideos(false)
+      setCurrentPhase('complete') // Go back to image completion view
+    }
+  }
+
+  async function handleRegenerateVideo(videoId) {
+    if (!confirm('Regenerate this video? This will use API credits.')) {
+      return
+    }
+
+    // Update status to generating
+    setVideoProgress(prev => ({
+      ...prev,
+      status: {
+        ...prev.status,
+        [videoId]: 'generating'
+      }
+    }))
+
+    try {
+      let result
+      
+      if (videoId === 'opening') {
+        result = await generateOpeningVideo(generatedImages)
+      } else {
+        // Parse video ID (e.g., "spread-1-2" -> spread 1 and 2)
+        const match = videoId.match(/spread-(\d+)-(\d+)/)
+        if (!match) {
+          throw new Error('Invalid video ID')
+        }
+        const startSpreadNum = parseInt(match[1])
+        const startSpreadKey = `spread-${startSpreadNum}`
+        const endSpreadKey = `spread-${startSpreadNum + 1}`
+        
+        result = await generateFlipVideo(
+          generatedImages[startSpreadKey],
+          generatedImages[endSpreadKey]
+        )
+      }
+
+      const videoInfo = {
+        url: result.url,
+        filename: videoId === 'opening' ? 'opening.mp4' : `${videoId}.mp4`,
+        downloadedAt: new Date().toISOString(),
+        duration: videoId === 'opening' ? 2 : 3,
+        predictionId: result.predictionId
+      }
+
+      // Download video
+      await downloadVideo(result.url, videoInfo.filename)
+
+      // Update state
+      setGeneratedVideos(prev => ({
+        ...prev,
+        [videoId]: videoInfo
+      }))
+
+      setVideoProgress(prev => ({
+        ...prev,
+        status: {
+          ...prev.status,
+          [videoId]: 'complete'
+        }
+      }))
+
+      // Save to IndexedDB
+      const updatedVideos = { ...generatedVideos, [videoId]: videoInfo }
+      await import('./utils/indexedDB').then(({ saveToIndexedDB }) => 
+        saveToIndexedDB('generatedVideos', updatedVideos)
+      )
+    } catch (error) {
+      console.error(`Regenerate video ${videoId} error:`, error)
+      alert(`Failed to regenerate video: ${error.message}`)
+      setVideoProgress(prev => ({
+        ...prev,
+        status: {
+          ...prev.status,
+          [videoId]: 'failed'
+        }
+      }))
+    }
+  }
+
   function handleUploadNew() {
     setCurrentPhase('upload')
     setExtractedPages({})
     setGeneratedImages({})
+    setGeneratedVideos({})
     setIsProcessing(false)
     setExtractionProgress(0)
     setExtractionMessage('')
     setIsGenerating(false)
     setGenerationProgress({
+      current: 0,
+      total: 0,
+      status: {}
+    })
+    setIsGeneratingVideos(false)
+    setVideoProgress({
       current: 0,
       total: 0,
       status: {}
@@ -153,6 +307,19 @@ function App() {
           generatedImages={generatedImages}
           isGenerating={isGenerating}
           progress={generationProgress}
+          onUploadNew={handleUploadNew}
+          onStartVideoGeneration={handleStartVideoGeneration}
+        />
+      )}
+
+      {(currentPhase === 'generating-videos' || currentPhase === 'videos-complete') && (
+        <VideoGenerationDashboard
+          generatedImages={generatedImages}
+          generatedVideos={generatedVideos}
+          isGeneratingVideos={isGeneratingVideos}
+          videoProgress={videoProgress}
+          onStartVideoGeneration={handleStartVideoGeneration}
+          onRegenerateVideo={handleRegenerateVideo}
           onUploadNew={handleUploadNew}
         />
       )}
