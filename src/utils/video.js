@@ -33,11 +33,39 @@ function convertDataUrlToBlobUrl(dataUrl) {
   return dataUrl
 }
 
+// Get the latest model version
+async function getModelVersion() {
+  if (!REPLICATE_API_KEY) {
+    throw new Error('Replicate API key not configured. Please set VITE_REPLICATE_API_KEY in .env')
+  }
+
+  const response = await fetch(`${REPLICATE_API_URL}/models/${MODEL}/versions`, {
+    headers: {
+      'Authorization': `Token ${REPLICATE_API_KEY}`,
+      'Content-Type': 'application/json'
+    }
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch model versions: ${response.status}`)
+  }
+
+  const data = await response.json()
+  // Return the latest version (first in the list)
+  if (data.results && data.results.length > 0) {
+    return data.results[0].id
+  }
+  throw new Error('No model versions found')
+}
+
 // Create a prediction on Replicate
 async function createPrediction(input) {
   if (!REPLICATE_API_KEY) {
     throw new Error('Replicate API key not configured. Please set VITE_REPLICATE_API_KEY in .env')
   }
+
+  // Get the latest model version
+  const version = await getModelVersion()
 
   const response = await fetch(`${REPLICATE_API_URL}/predictions`, {
     method: 'POST',
@@ -46,14 +74,20 @@ async function createPrediction(input) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: MODEL,
+      version: version,
       input: input
     })
   })
 
   if (!response.ok) {
-    const error = await response.json()
-    throw new Error(`Replicate API error: ${response.status} - ${JSON.stringify(error)}`)
+    const errorText = await response.text()
+    let errorJson
+    try {
+      errorJson = JSON.parse(errorText)
+    } catch (e) {
+      throw new Error(`Replicate API error: ${response.status} - ${errorText}`)
+    }
+    throw new Error(`Replicate API error: ${response.status} - ${JSON.stringify(errorJson)}`)
   }
 
   return await response.json()
