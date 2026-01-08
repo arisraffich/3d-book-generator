@@ -1,6 +1,6 @@
 # 3D Book Generator
 
-A frontend-only React app that converts PDF books into photorealistic 3D book page renders.
+A frontend-only React application that converts PDF books into photorealistic 3D book page renders.
 
 ## Features
 
