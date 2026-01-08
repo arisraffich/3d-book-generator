@@ -77,7 +77,7 @@ function UploadArea({ onUploadComplete, onProcessingUpdate, isProcessing, progre
       >
         <div className="upload-icon">📄</div>
         <div className="upload-text">Drop PDF here or click to upload</div>
-        <div className="upload-hint">Supports: PDF files only</div>
+        <div className="upload-hint">Supports PDF files only</div>
       </div>
       <input
         id="file-input"
