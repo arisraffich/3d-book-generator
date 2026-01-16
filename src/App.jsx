@@ -3,8 +3,8 @@ import UploadArea from './components/UploadArea'
 import PreviewDashboard from './components/PreviewDashboard'
 import GenerationDashboard from './components/GenerationDashboard'
 import VideoGenerationDashboard from './components/VideoGenerationDashboard'
-import { loadFromIndexedDB } from './utils/indexedDB'
-import { generateAllImages } from './utils/api'
+import { loadFromIndexedDB, saveToIndexedDB } from './utils/indexedDB'
+import { generateAllImages, generateImage, PROMPT_1_COVER, PROMPT_2_FIRST_INTERIOR, PROMPT_3_REMAINING_INTERIORS } from './utils/api'
 import { downloadImage } from './utils/download'
 import { generateAllVideos, downloadVideo, generateOpeningVideo, generateFlipVideo } from './utils/video'
 
@@ -183,6 +183,89 @@ function App() {
     }
   }
 
+  async function handleRegenerateImage(imageKey) {
+    if (!confirm(`Regenerate ${imageKey}? This will use API credits.`)) {
+      return
+    }
+
+    // Update status to generating
+    setGenerationProgress(prev => ({
+      ...prev,
+      status: {
+        ...prev.status,
+        [imageKey]: 'generating'
+      }
+    }))
+
+    try {
+      let imageUrl
+      if (imageKey === 'cover') {
+        const coverPage = extractedPages['Cover Page']
+        if (!coverPage) throw new Error('Cover page not found')
+        imageUrl = await generateImage(PROMPT_1_COVER, { image: coverPage.base64 })
+      } else if (imageKey === 'spread-1') {
+        const leftPage = extractedPages['1-left']
+        const rightPage = extractedPages['1-right']
+        if (!leftPage || !rightPage) throw new Error('Spread 1 pages not found')
+        imageUrl = await generateImage(PROMPT_2_FIRST_INTERIOR, {
+          reference_image: generatedImages['cover'].url,
+          left_page_image: leftPage.base64,
+          right_page_image: rightPage.base64
+        })
+      } else {
+        const spreadNum = parseInt(imageKey.replace('spread-', ''))
+        const leftPage = extractedPages[`${spreadNum}-left`]
+        const rightPage = extractedPages[`${spreadNum}-right`]
+        if (!leftPage || !rightPage) throw new Error(`Spread ${spreadNum} pages not found`)
+
+        // Use spread-1 as reference if it exists, otherwise use cover
+        const referenceUrl = (generatedImages['spread-1'] && generatedImages['spread-1'].url) || (generatedImages['cover'] && generatedImages['cover'].url)
+        if (!referenceUrl) throw new Error('Reference image not found')
+
+        imageUrl = await generateImage(PROMPT_3_REMAINING_INTERIORS, {
+          reference_image: referenceUrl,
+          left_page_image: leftPage.base64,
+          right_page_image: rightPage.base64
+        })
+      }
+
+      // Download image
+      const filename = imageKey === 'cover' ? 'cover.jpg' : `${imageKey.replace('spread-', '')}-spread.jpg`
+      await downloadImage(imageUrl, filename)
+
+      // Update state
+      const imageInfo = {
+        url: imageUrl,
+        generatedAt: new Date().toISOString(),
+        downloaded: true
+      }
+
+      setGeneratedImages(prev => {
+        const next = { ...prev, [imageKey]: imageInfo }
+        saveToIndexedDB('generatedImages', next)
+        return next
+      })
+
+      setGenerationProgress(prev => ({
+        ...prev,
+        status: {
+          ...prev.status,
+          [imageKey]: 'complete'
+        }
+      }))
+    } catch (error) {
+      console.error(`Regenerate image ${imageKey} error:`, error)
+      alert(`Failed to regenerate image: ${error.message}`)
+      setGenerationProgress(prev => ({
+        ...prev,
+        status: {
+          ...prev.status,
+          [imageKey]: 'failed'
+        }
+      }))
+    }
+  }
+
   async function handleRegenerateVideo(videoId) {
     if (!confirm('Regenerate this video? This will use API credits.')) {
       return
@@ -235,10 +318,11 @@ function App() {
       await downloadVideo(result.url, videoInfo.filename)
 
       // Update state
-      setGeneratedVideos(prev => ({
-        ...prev,
-        [videoId]: videoInfo
-      }))
+      setGeneratedVideos(prev => {
+        const next = { ...prev, [videoId]: videoInfo }
+        saveToIndexedDB('generatedVideos', next)
+        return next
+      })
 
       setVideoProgress(prev => ({
         ...prev,
@@ -247,12 +331,6 @@ function App() {
           [videoId]: 'complete'
         }
       }))
-
-      // Save to IndexedDB
-      const updatedVideos = { ...generatedVideos, [videoId]: videoInfo }
-      await import('./utils/indexedDB').then(({ saveToIndexedDB }) =>
-        saveToIndexedDB('generatedVideos', updatedVideos)
-      )
     } catch (error) {
       console.error(`Regenerate video ${videoId} error:`, error)
       alert(`Failed to regenerate video: ${error.message}`)
@@ -315,6 +393,7 @@ function App() {
           progress={generationProgress}
           onUploadNew={handleUploadNew}
           onStartVideoGeneration={handleStartVideoGeneration}
+          onRegenerateImage={handleRegenerateImage}
         />
       )}
 

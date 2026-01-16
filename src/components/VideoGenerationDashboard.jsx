@@ -53,7 +53,7 @@ function VideoGenerationDashboard({
           <span className="status-name">{getVideoLabel('opening')}</span>
         </div>
         {openingImage && (
-          <div 
+          <div
             className="video-thumbnail"
             onClick={() => openingStatus === 'complete' && openingVideo && setPreviewVideoId('opening')}
             style={{ cursor: openingStatus === 'complete' ? 'pointer' : 'default' }}
@@ -69,12 +69,12 @@ function VideoGenerationDashboard({
           </div>
         )}
         <div className="status-details">
-          {openingStatus === 'complete' ? 'Downloaded ✓' : 
-           openingStatus === 'generating' ? 'Generating...' : 
-           openingStatus === 'failed' ? 'Failed' : 'Pending...'}
+          {openingStatus === 'complete' ? 'Downloaded ✓' :
+            openingStatus === 'generating' ? 'Generating...' :
+              openingStatus === 'failed' ? 'Failed' : 'Pending...'}
         </div>
-        {openingStatus === 'complete' && openingVideo && (
-          <button 
+        {(openingStatus === 'complete' || openingStatus === 'failed') && (
+          <button
             className="regenerate-btn"
             onClick={() => onRegenerateVideo('opening')}
           >
@@ -100,7 +100,7 @@ function VideoGenerationDashboard({
             <span className="status-name">{getVideoLabel(videoId)}</span>
           </div>
           {thumbnailImage && (
-            <div 
+            <div
               className="video-thumbnail"
               onClick={() => videoStatus === 'complete' && video && setPreviewVideoId(videoId)}
               style={{ cursor: videoStatus === 'complete' ? 'pointer' : 'default' }}
@@ -116,12 +116,12 @@ function VideoGenerationDashboard({
             </div>
           )}
           <div className="status-details">
-            {videoStatus === 'complete' ? 'Downloaded ✓' : 
-             videoStatus === 'generating' ? 'Generating...' : 
-             videoStatus === 'failed' ? 'Failed' : 'Pending...'}
+            {videoStatus === 'complete' ? 'Downloaded ✓' :
+              videoStatus === 'generating' ? 'Generating...' :
+                videoStatus === 'failed' ? 'Failed' : 'Pending...'}
           </div>
-          {videoStatus === 'complete' && video && (
-            <button 
+          {(videoStatus === 'complete' || videoStatus === 'failed') && (
+            <button
               className="regenerate-btn"
               onClick={() => onRegenerateVideo(videoId)}
             >

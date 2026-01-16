@@ -4,7 +4,8 @@ function GenerationDashboard({
   isGenerating,
   progress,
   onUploadNew,
-  onStartVideoGeneration
+  onStartVideoGeneration,
+  onRegenerateImage
 }) {
   function getStatusIcon(status) {
     switch (status) {
@@ -22,7 +23,7 @@ function GenerationDashboard({
   function renderGenerationStatus() {
     const items = []
     const total = progress.total
-    
+
     // Cover
     const coverStatus = progress.status['cover'] || 'pending'
     items.push(
@@ -39,13 +40,21 @@ function GenerationDashboard({
           />
         )}
         <div className="status-details">
-          {coverStatus === 'complete' ? 'Downloaded ✓' : 
-           coverStatus === 'generating' ? 'Generating...' : 
-           coverStatus === 'failed' ? 'Failed - will retry' : 'Pending...'}
+          {coverStatus === 'complete' ? 'Downloaded ✓' :
+            coverStatus === 'generating' ? 'Generating...' :
+              coverStatus === 'failed' ? 'Failed' : 'Pending...'}
         </div>
+        {(coverStatus === 'complete' || coverStatus === 'failed') && onRegenerateImage && (
+          <button
+            className="regenerate-btn"
+            onClick={() => onRegenerateImage('cover')}
+          >
+            ↻ Regenerate
+          </button>
+        )}
       </div>
     )
-    
+
     // Spreads
     for (let i = 1; i <= total - 1; i++) {
       const spreadKey = `spread-${i}`
@@ -64,14 +73,22 @@ function GenerationDashboard({
             />
           )}
           <div className="status-details">
-            {spreadStatus === 'complete' ? 'Downloaded ✓' : 
-             spreadStatus === 'generating' ? 'Generating...' : 
-             spreadStatus === 'failed' ? 'Failed - will retry' : 'Pending...'}
+            {spreadStatus === 'complete' ? 'Downloaded ✓' :
+              spreadStatus === 'generating' ? 'Generating...' :
+                spreadStatus === 'failed' ? 'Failed' : 'Pending...'}
           </div>
+          {(spreadStatus === 'complete' || spreadStatus === 'failed') && onRegenerateImage && (
+            <button
+              className="regenerate-btn"
+              onClick={() => onRegenerateImage(spreadKey)}
+            >
+              ↻ Regenerate
+            </button>
+          )}
         </div>
       )
     }
-    
+
     return items
   }
 

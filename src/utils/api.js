@@ -10,7 +10,7 @@ const API_URL = import.meta.env.DEV
   : '/api/google'  // Use Cloudflare Function in production
 
 // Prompts
-const PROMPT_1_COVER = `Create a photorealistic 3D render of the book based on the provided cover design.
+export const PROMPT_1_COVER = `Create a photorealistic 3D render of the book based on the provided cover design.
 
 Book Specifications:
 Analyze the uploaded cover to determine the layout dimensions (vertical/square/horizontal format)
@@ -38,7 +38,7 @@ Maintain crisp focus on the book cover with gentle background blur for visual se
 
 Output Style: The final render should resemble premium product photography for a publisher's catalog—clean, professional, inviting, and emphasizing the book's physical quality and cover design artistry.`
 
-const PROMPT_2_FIRST_INTERIOR = `Create a photorealistic 3D render of an open book showing two interior pages, using the provided 3D book cover as a reference for style, environment, and physical properties.
+export const PROMPT_2_FIRST_INTERIOR = `Create a photorealistic 3D render of an open book showing two interior pages, using the provided 3D book cover as a reference for style, environment, and physical properties.
 
 Reference Analysis:
 Analyze the provided 3D book cover image to understand the book's physical dimensions, cover finish, spine thickness, and environmental setting
@@ -63,7 +63,7 @@ The overall atmosphere should feel like a continuation of the same photoshoot fr
 
 Output Style: The final render should appear as if it's from the same professional product photography session as the 3D cover reference—maintaining identical environmental conditions, lighting quality, and photographic style for complete visual cohesion. The camera angle should be consistent, professional, and flattering, showing the open book in a clear, readable overhead perspective.`
 
-const PROMPT_3_REMAINING_INTERIORS = `Using the 3 provided reference images, recreate the open book image while ONLY replacing the content on the two interior pages with the new page images provided.
+export const PROMPT_3_REMAINING_INTERIORS = `Using the 3 provided reference images, recreate the open book image while ONLY replacing the content on the two interior pages with the new page images provided.
 
 Reference Images Provided:
 Open book template image (showing book structure, lighting, angle, environment)
@@ -95,7 +95,7 @@ The new page content should appear naturally printed on the pages, not pasted or
 Match exact depth, perspective, and dimensional qualities from the reference
 The result should look like the same physical book from the same photoshoot, just turned to different pages.`
 
-async function generateImage(prompt, images = {}) {
+export async function generateImage(prompt, images = {}) {
   if (!API_KEY) {
     throw new Error('Google API key not configured. Please set VITE_NANO_BANANA_API_KEY in .env')
   }
