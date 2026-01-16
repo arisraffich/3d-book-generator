@@ -5,9 +5,9 @@ const API_BASE_URL = import.meta.env.VITE_NANO_BANANA_API_URL || 'https://genera
 
 // Use proxy in development to avoid CORS, direct URL in production
 // In production (Cloudflare Pages), API calls go directly to Google's API
-const API_URL = import.meta.env.DEV 
+const API_URL = import.meta.env.DEV
   ? '/google-api'  // Use Vite proxy in development
-  : API_BASE_URL
+  : '/api/google'  // Use Cloudflare Function in production
 
 // Prompts
 const PROMPT_1_COVER = `Create a photorealistic 3D render of the book based on the provided cover design.
@@ -103,14 +103,14 @@ async function generateImage(prompt, images = {}) {
   // Nano Banana Pro model: gemini-3-pro-image-preview
   const MODEL = 'gemini-3-pro-image-preview'
   const endpoint = `/v1beta/models/${MODEL}:generateContent`
-  
+
   try {
     // Build parts array for Gemini API
     const parts = []
-    
+
     // Add text prompt
     parts.push({ text: prompt })
-    
+
     // Add reference images if provided
     if (images.image) {
       // For cover generation with reference image
@@ -121,11 +121,11 @@ async function generateImage(prompt, images = {}) {
         }
       })
     }
-    
+
     // For spread generation - add reference and page images
     if (images.reference_image) {
       let imageData = images.reference_image
-      
+
       // If it's a data URL, extract the base64 part
       if (typeof imageData === 'string' && imageData.startsWith('data:')) {
         const matches = imageData.match(/data:([^;]+);base64,(.+)/)
@@ -152,7 +152,7 @@ async function generateImage(prompt, images = {}) {
         console.warn('Reference image URL not yet supported, skipping')
       }
     }
-    
+
     if (images.left_page_image) {
       parts.push({
         inlineData: {
@@ -161,7 +161,7 @@ async function generateImage(prompt, images = {}) {
         }
       })
     }
-    
+
     if (images.right_page_image) {
       parts.push({
         inlineData: {
@@ -170,7 +170,7 @@ async function generateImage(prompt, images = {}) {
         }
       })
     }
-    
+
     const payload = {
       contents: [{
         parts: parts
@@ -185,11 +185,11 @@ async function generateImage(prompt, images = {}) {
     }
 
     const fullUrl = `${API_URL}${endpoint}?key=${API_KEY}`
-    
+
     const headers = {
       'Content-Type': 'application/json'
     }
-    
+
     const response = await fetch(fullUrl, {
       method: 'POST',
       headers,
@@ -198,7 +198,7 @@ async function generateImage(prompt, images = {}) {
 
     if (response.ok) {
       const result = await response.json()
-      
+
       // Nano Banana Pro (Gemini) returns images in candidates[0].content.parts
       if (result.candidates && result.candidates.length > 0) {
         const candidate = result.candidates[0]
@@ -212,7 +212,7 @@ async function generateImage(prompt, images = {}) {
           }
         }
       }
-      
+
       throw new Error('No image found in Nano Banana Pro API response')
     }
 
@@ -225,7 +225,7 @@ async function generateImage(prompt, images = {}) {
     } catch (e) {
       console.error(`Failed to parse error response:`, e)
     }
-    
+
     throw new Error(`Nano Banana Pro API error: ${response.status} - ${errorText || response.statusText}`)
   } catch (error) {
     console.error('Image generation error:', error)
@@ -275,7 +275,7 @@ export async function generateAllImages(extractedPages, onProgressUpdate, onImag
     currentProgress.current = 1
     onProgressUpdate({ ...currentProgress })
     await saveToIndexedDB('generatedImages', generatedImages)
-    
+
     if (onImageGenerated) {
       await onImageGenerated('cover', coverUrl)
     }
@@ -315,7 +315,7 @@ export async function generateAllImages(extractedPages, onProgressUpdate, onImag
     currentProgress.current = 2
     onProgressUpdate({ ...currentProgress })
     await saveToIndexedDB('generatedImages', generatedImages)
-    
+
     if (onImageGenerated) {
       await onImageGenerated('spread-1', spread1Url)
     }
@@ -368,7 +368,7 @@ async function generateSpread(spreadNum, spread1Reference, leftPage, rightPage, 
     currentProgress.current += 1
     onProgressUpdate({ ...currentProgress })
     await saveToIndexedDB('generatedImages', generatedImages)
-    
+
     if (onImageGenerated) {
       await onImageGenerated(`spread-${spreadNum}`, spreadUrl)
     }
