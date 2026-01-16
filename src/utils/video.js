@@ -4,7 +4,7 @@ const REPLICATE_API_KEY = import.meta.env.VITE_REPLICATE_API_KEY
 const REPLICATE_API_BASE_URL = 'https://api.replicate.com/v1'
 
 // Use proxy in development (Vite) and production (Cloudflare Function) to avoid CORS
-const REPLICATE_API_URL = import.meta.env.DEV 
+const REPLICATE_API_URL = import.meta.env.DEV
   ? '/replicate-api/v1'  // Use Vite proxy in development
   : '/api/replicate'     // Use Cloudflare Function in production
 
@@ -59,12 +59,12 @@ async function getModelVersion() {
   }
 
   const modelData = await response.json()
-  
+
   // Extract latest version ID from model.latest_version.id
   if (modelData.latest_version && modelData.latest_version.id) {
     return modelData.latest_version.id
   }
-  
+
   throw new Error('No latest version found in model data')
 }
 
@@ -235,8 +235,12 @@ export async function generateFlipVideo(startSpread, endSpread, onProgress) {
 // Generate all videos
 export async function generateAllVideos(generatedImages, onProgressUpdate, onVideoGenerated) {
   const generatedVideos = {}
-  const spreadCount = Math.floor((Object.keys(generatedImages).length - 1) / 2)
-  const totalVideos = spreadCount // Opening + (spreads - 1) flips
+
+  // Count actual spread keys (spread-1, spread-2, etc.)
+  const spreadCount = Object.keys(generatedImages).filter(k => k.startsWith('spread-')).length
+  // Total videos = 1 opening + (spreadCount - 1) flip videos
+  const flipCount = spreadCount > 0 ? spreadCount - 1 : 0
+  const totalVideos = 1 + flipCount
 
   let currentProgress = {
     current: 0,
@@ -246,7 +250,7 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
 
   // Initialize status
   currentProgress.status['opening'] = 'pending'
-  for (let i = 1; i < spreadCount; i++) {
+  for (let i = 1; i <= flipCount; i++) {
     currentProgress.status[`spread-${i}-${i + 1}`] = 'pending'
   }
   onProgressUpdate({ ...currentProgress })

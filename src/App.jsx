@@ -39,12 +39,12 @@ function App() {
       const savedPages = await loadFromIndexedDB('extractedPages')
       const savedImages = await loadFromIndexedDB('generatedImages')
       const savedVideos = await loadFromIndexedDB('generatedVideos')
-      
+
       if (savedPages && Object.keys(savedPages).length > 0) {
         setExtractedPages(savedPages)
         setCurrentPhase('preview')
       }
-      
+
       if (savedImages && Object.keys(savedImages).length > 0) {
         setGeneratedImages(savedImages)
       }
@@ -90,11 +90,11 @@ function App() {
     // Switch to generating phase
     setCurrentPhase('generating')
     setIsGenerating(true)
-    
+
     // Calculate total items to generate
     const spreadCount = Math.floor((Object.keys(extractedPages).length - 1) / 2)
     const total = spreadCount + 1 // +1 for cover
-    
+
     // Initialize progress
     setGenerationProgress({
       current: 0,
@@ -120,7 +120,7 @@ function App() {
           }
         }
       )
-      
+
       // Generation complete
       setGeneratedImages(generated)
       setIsGenerating(false)
@@ -147,7 +147,8 @@ function App() {
     setIsGeneratingVideos(true)
 
     const spreadCount = Object.keys(generatedImages).filter(k => k.startsWith('spread-')).length
-    const totalVideos = spreadCount // Opening + (spreads - 1) flips
+    const flipCount = spreadCount > 0 ? spreadCount - 1 : 0
+    const totalVideos = 1 + flipCount // 1 opening + flip videos
 
     setVideoProgress({
       current: 0,
@@ -199,7 +200,7 @@ function App() {
     try {
       let result
       const currentImages = generatedImages // Ensure we have the latest images
-      
+
       if (videoId === 'opening') {
         result = await generateOpeningVideo(currentImages)
       } else {
@@ -211,11 +212,11 @@ function App() {
         const startSpreadNum = parseInt(match[1])
         const startSpreadKey = `spread-${startSpreadNum}`
         const endSpreadKey = `spread-${startSpreadNum + 1}`
-        
+
         if (!currentImages[startSpreadKey] || !currentImages[endSpreadKey]) {
           throw new Error('Required images not found for this video')
         }
-        
+
         result = await generateFlipVideo(
           currentImages[startSpreadKey],
           currentImages[endSpreadKey]
@@ -249,7 +250,7 @@ function App() {
 
       // Save to IndexedDB
       const updatedVideos = { ...generatedVideos, [videoId]: videoInfo }
-      await import('./utils/indexedDB').then(({ saveToIndexedDB }) => 
+      await import('./utils/indexedDB').then(({ saveToIndexedDB }) =>
         saveToIndexedDB('generatedVideos', updatedVideos)
       )
     } catch (error) {
