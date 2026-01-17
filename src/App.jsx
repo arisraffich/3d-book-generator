@@ -117,6 +117,16 @@ function App() {
           setGenerationProgress(progressUpdate)
         },
         async (imageKey, imageUrl) => {
+          // Update state incrementally so images can be previewed during generation
+          setGeneratedImages(prev => ({
+            ...prev,
+            [imageKey]: {
+              url: imageUrl,
+              generatedAt: new Date().toISOString(),
+              downloaded: true
+            }
+          }))
+          
           // Auto-download each generated image
           const filename = imageKey === 'cover' ? 'cover.jpg' : `${imageKey.replace('spread-', '')}-spread.jpg`
           try {
@@ -169,6 +179,12 @@ function App() {
           setVideoProgress(progressUpdate)
         },
         async (videoId, videoUrl, videoInfo) => {
+          // Update state incrementally so videos can be previewed during generation
+          setGeneratedVideos(prev => ({
+            ...prev,
+            [videoId]: videoInfo
+          }))
+          
           // Auto-download each generated video
           try {
             await downloadVideo(videoUrl, videoInfo.filename)
