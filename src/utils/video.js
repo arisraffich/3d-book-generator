@@ -313,7 +313,10 @@ export async function generateFlipVideoWithRetry(startSpread, endSpread, onProgr
   throw lastError
 }
 
-// Generate all videos
+// Parallel batch size for video generation
+const PARALLEL_BATCH_SIZE = 5
+
+// Generate all videos (with parallel batches for flip videos)
 export async function generateAllVideos(generatedImages, onProgressUpdate, onVideoGenerated) {
   const generatedVideos = {}
 
@@ -336,7 +339,7 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
   }
   onProgressUpdate({ ...currentProgress })
 
-  // Step 1: Generate Opening Video
+  // Step 1: Generate Opening Video (sequential - just one)
   try {
     currentProgress.status['opening'] = 'generating'
     onProgressUpdate({ ...currentProgress })
@@ -377,7 +380,7 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
     throw error
   }
 
-  // Step 2: Generate Flip Videos (sequentially)
+  // Step 2: Generate Flip Videos (in parallel batches of PARALLEL_BATCH_SIZE)
   const spreads = Object.keys(generatedImages)
     .filter(key => key.startsWith('spread-'))
     .sort((a, b) => {
@@ -386,54 +389,91 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
       return numA - numB
     })
 
+  // Build array of all flip video tasks
+  const flipTasks = []
   for (let i = 0; i < spreads.length - 1; i++) {
     const currentSpreadKey = spreads[i]
     const nextSpreadKey = spreads[i + 1]
     const videoId = `spread-${i + 1}-${i + 2}`
+    
+    flipTasks.push({
+      videoId,
+      currentSpreadKey,
+      nextSpreadKey,
+      startSpread: generatedImages[currentSpreadKey],
+      endSpread: generatedImages[nextSpreadKey]
+    })
+  }
 
-    try {
-      currentProgress.status[videoId] = 'generating'
-      onProgressUpdate({ ...currentProgress })
-
-      const result = await generateFlipVideoWithRetry(
-        generatedImages[currentSpreadKey],
-        generatedImages[nextSpreadKey],
-        (logs) => {
-          // Could parse logs for detailed progress if needed
-        },
-        (attempt, max) => {
-          currentProgress.status[videoId] = `retrying (${attempt}/${max})`
-          onProgressUpdate({ ...currentProgress })
-        }
-      )
-
-      generatedVideos[videoId] = {
-        url: result.url,
-        filename: `${videoId}.mp4`,
-        downloadedAt: new Date().toISOString(),
-        startFrame: currentSpreadKey,
-        endFrame: nextSpreadKey,
-        duration: 3,
-        predictionId: result.predictionId
-      }
-
-      currentProgress.status[videoId] = 'complete'
-      currentProgress.current += 1
-      onProgressUpdate({ ...currentProgress })
-      await saveToIndexedDB('generatedVideos', generatedVideos)
-
-      if (onVideoGenerated) {
-        await onVideoGenerated(videoId, result.url, generatedVideos[videoId])
-      }
-    } catch (error) {
-      console.error(`Flip video ${videoId} generation error:`, error)
-      currentProgress.status[videoId] = 'failed'
-      onProgressUpdate({ ...currentProgress })
-      // Continue with other videos even if one fails
+  // Process flip videos in parallel batches
+  for (let batchStart = 0; batchStart < flipTasks.length; batchStart += PARALLEL_BATCH_SIZE) {
+    const batch = flipTasks.slice(batchStart, batchStart + PARALLEL_BATCH_SIZE)
+    
+    // Mark all videos in this batch as generating
+    for (const task of batch) {
+      currentProgress.status[task.videoId] = 'generating'
     }
+    onProgressUpdate({ ...currentProgress })
+
+    // Generate all videos in batch in parallel
+    const batchPromises = batch.map(task => 
+      generateFlipVideoTask(
+        task,
+        generatedVideos,
+        currentProgress,
+        onProgressUpdate,
+        onVideoGenerated
+      )
+    )
+
+    // Wait for entire batch to complete before starting next batch
+    await Promise.all(batchPromises)
   }
 
   return generatedVideos
+}
+
+// Helper function to generate a single flip video (used in parallel)
+async function generateFlipVideoTask(task, generatedVideos, currentProgress, onProgressUpdate, onVideoGenerated) {
+  const { videoId, currentSpreadKey, nextSpreadKey, startSpread, endSpread } = task
+
+  try {
+    const result = await generateFlipVideoWithRetry(
+      startSpread,
+      endSpread,
+      (logs) => {
+        // Could parse logs for detailed progress if needed
+      },
+      (attempt, max) => {
+        currentProgress.status[videoId] = `retrying (${attempt}/${max})`
+        onProgressUpdate({ ...currentProgress })
+      }
+    )
+
+    generatedVideos[videoId] = {
+      url: result.url,
+      filename: `${videoId}.mp4`,
+      downloadedAt: new Date().toISOString(),
+      startFrame: currentSpreadKey,
+      endFrame: nextSpreadKey,
+      duration: 3,
+      predictionId: result.predictionId
+    }
+
+    currentProgress.status[videoId] = 'complete'
+    currentProgress.current += 1
+    onProgressUpdate({ ...currentProgress })
+    await saveToIndexedDB('generatedVideos', generatedVideos)
+
+    if (onVideoGenerated) {
+      await onVideoGenerated(videoId, result.url, generatedVideos[videoId])
+    }
+  } catch (error) {
+    console.error(`Flip video ${videoId} generation error:`, error)
+    currentProgress.status[videoId] = 'failed'
+    onProgressUpdate({ ...currentProgress })
+    // Don't throw - allow other videos in batch to continue
+  }
 }
 
 // Download video helper
