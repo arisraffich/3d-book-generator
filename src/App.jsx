@@ -38,7 +38,7 @@ function App() {
     try {
       const savedPages = await loadFromIndexedDB('extractedPages')
       const savedImages = await loadFromIndexedDB('generatedImages')
-      const savedVideos = await loadFromIndexedDB('generatedVideos')
+      // Note: Videos are NOT restored on refresh - user must click "Generate Videos" to enter video phase
 
       if (savedPages && Object.keys(savedPages).length > 0) {
         setExtractedPages(savedPages)
@@ -67,36 +67,8 @@ function App() {
           })
           
           // Go to complete phase (allows regeneration of any pending/failed items)
+          // Video phase is ONLY entered when user clicks "Generate Videos" button
           setCurrentPhase('complete')
-          
-          // Check for videos
-          if (savedVideos && Object.keys(savedVideos).length > 0) {
-            setGeneratedVideos(savedVideos)
-            const videoCount = Object.keys(savedVideos).length
-            const imageSpreadCount = Object.keys(savedImages).filter(k => k.startsWith('spread-')).length
-            const flipCount = imageSpreadCount > 0 ? imageSpreadCount - 1 : 0
-            const expectedVideoCount = 1 + flipCount // 1 opening + flip videos
-            
-            // Build video status
-            const videoStatus = { opening: savedVideos['opening'] ? 'complete' : 'pending' }
-            for (let i = 1; i <= flipCount; i++) {
-              const videoId = `spread-${i}-${i + 1}`
-              videoStatus[videoId] = savedVideos[videoId] ? 'complete' : 'pending'
-            }
-            
-            const completedVideoCount = Object.values(videoStatus).filter(s => s === 'complete').length
-            
-            setVideoProgress({
-              current: completedVideoCount,
-              total: expectedVideoCount,
-              status: videoStatus
-            })
-            
-            // If we have any videos, show video dashboard
-            if (videoCount > 0) {
-              setCurrentPhase('videos-complete')
-            }
-          }
         } else {
           setCurrentPhase('preview')
         }
