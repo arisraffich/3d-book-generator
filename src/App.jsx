@@ -4,9 +4,9 @@ import PreviewDashboard from './components/PreviewDashboard'
 import GenerationDashboard from './components/GenerationDashboard'
 import VideoGenerationDashboard from './components/VideoGenerationDashboard'
 import { loadFromIndexedDB, saveToIndexedDB } from './utils/indexedDB'
-import { generateAllImages, generateImage, PROMPT_1_COVER, PROMPT_2_FIRST_INTERIOR, PROMPT_3_REMAINING_INTERIORS } from './utils/api'
+import { generateAllImages, generateImageWithRetry, PROMPT_1_COVER, PROMPT_2_FIRST_INTERIOR, PROMPT_3_REMAINING_INTERIORS } from './utils/api'
 import { downloadImage } from './utils/download'
-import { generateAllVideos, downloadVideo, generateOpeningVideo, generateFlipVideo } from './utils/video'
+import { generateAllVideos, downloadVideo, generateOpeningVideoWithRetry, generateFlipVideoWithRetry } from './utils/video'
 
 function App() {
   const [currentPhase, setCurrentPhase] = useState('upload') // 'upload' | 'preview' | 'generating' | 'complete' | 'generating-videos' | 'videos-complete'
@@ -42,29 +42,63 @@ function App() {
 
       if (savedPages && Object.keys(savedPages).length > 0) {
         setExtractedPages(savedPages)
-        setCurrentPhase('preview')
-      }
-
-      if (savedImages && Object.keys(savedImages).length > 0) {
-        setGeneratedImages(savedImages)
-      }
-
-      if (savedVideos && Object.keys(savedVideos).length > 0) {
-        setGeneratedVideos(savedVideos)
-        // If videos exist, show video dashboard
-        const videoCount = Object.keys(savedVideos).length
-        const spreadCount = Object.keys(savedImages).filter(k => k.startsWith('spread-')).length
-        const expectedVideoCount = spreadCount
-        if (videoCount === expectedVideoCount && expectedVideoCount > 0) {
-          setCurrentPhase('videos-complete')
-          setVideoProgress({
-            current: videoCount,
-            total: expectedVideoCount,
-            status: Object.keys(savedVideos).reduce((acc, key) => {
-              acc[key] = 'complete'
-              return acc
-            }, {})
+        
+        // Check if we have generated images - restore to appropriate phase
+        if (savedImages && Object.keys(savedImages).length > 0) {
+          setGeneratedImages(savedImages)
+          
+          // Reconstruct progress from saved images
+          const spreadCount = Math.floor((Object.keys(savedPages).length - 1) / 2)
+          const total = spreadCount + 1 // +1 for cover
+          
+          // Build status from what we have
+          const status = {}
+          status['cover'] = savedImages['cover'] ? 'complete' : 'pending'
+          for (let i = 1; i <= spreadCount; i++) {
+            status[`spread-${i}`] = savedImages[`spread-${i}`] ? 'complete' : 'pending'
+          }
+          
+          const completedCount = Object.values(status).filter(s => s === 'complete').length
+          
+          setGenerationProgress({
+            current: completedCount,
+            total,
+            status
           })
+          
+          // Go to complete phase (allows regeneration of any pending/failed items)
+          setCurrentPhase('complete')
+          
+          // Check for videos
+          if (savedVideos && Object.keys(savedVideos).length > 0) {
+            setGeneratedVideos(savedVideos)
+            const videoCount = Object.keys(savedVideos).length
+            const imageSpreadCount = Object.keys(savedImages).filter(k => k.startsWith('spread-')).length
+            const flipCount = imageSpreadCount > 0 ? imageSpreadCount - 1 : 0
+            const expectedVideoCount = 1 + flipCount // 1 opening + flip videos
+            
+            // Build video status
+            const videoStatus = { opening: savedVideos['opening'] ? 'complete' : 'pending' }
+            for (let i = 1; i <= flipCount; i++) {
+              const videoId = `spread-${i}-${i + 1}`
+              videoStatus[videoId] = savedVideos[videoId] ? 'complete' : 'pending'
+            }
+            
+            const completedVideoCount = Object.values(videoStatus).filter(s => s === 'complete').length
+            
+            setVideoProgress({
+              current: completedVideoCount,
+              total: expectedVideoCount,
+              status: videoStatus
+            })
+            
+            // If we have any videos, show video dashboard
+            if (videoCount > 0) {
+              setCurrentPhase('videos-complete')
+            }
+          }
+        } else {
+          setCurrentPhase('preview')
         }
       }
     } catch (error) {
@@ -197,21 +231,32 @@ function App() {
       }
     }))
 
+    // Helper to update retry status
+    const onRetry = (attempt, max) => {
+      setGenerationProgress(prev => ({
+        ...prev,
+        status: {
+          ...prev.status,
+          [imageKey]: `retrying (${attempt}/${max})`
+        }
+      }))
+    }
+
     try {
       let imageUrl
       if (imageKey === 'cover') {
         const coverPage = extractedPages['Cover Page']
         if (!coverPage) throw new Error('Cover page not found')
-        imageUrl = await generateImage(PROMPT_1_COVER, { image: coverPage.base64 })
+        imageUrl = await generateImageWithRetry(PROMPT_1_COVER, { image: coverPage.base64 }, onRetry)
       } else if (imageKey === 'spread-1') {
         const leftPage = extractedPages['1-left']
         const rightPage = extractedPages['1-right']
         if (!leftPage || !rightPage) throw new Error('Spread 1 pages not found')
-        imageUrl = await generateImage(PROMPT_2_FIRST_INTERIOR, {
+        imageUrl = await generateImageWithRetry(PROMPT_2_FIRST_INTERIOR, {
           reference_image: generatedImages['cover'].url,
           left_page_image: leftPage.base64,
           right_page_image: rightPage.base64
-        })
+        }, onRetry)
       } else {
         const spreadNum = parseInt(imageKey.replace('spread-', ''))
         const leftPage = extractedPages[`${spreadNum}-left`]
@@ -222,11 +267,11 @@ function App() {
         const referenceUrl = (generatedImages['spread-1'] && generatedImages['spread-1'].url) || (generatedImages['cover'] && generatedImages['cover'].url)
         if (!referenceUrl) throw new Error('Reference image not found')
 
-        imageUrl = await generateImage(PROMPT_3_REMAINING_INTERIORS, {
+        imageUrl = await generateImageWithRetry(PROMPT_3_REMAINING_INTERIORS, {
           reference_image: referenceUrl,
           left_page_image: leftPage.base64,
           right_page_image: rightPage.base64
-        })
+        }, onRetry)
       }
 
       // Download image
@@ -246,13 +291,15 @@ function App() {
         return next
       })
 
-      setGenerationProgress(prev => ({
-        ...prev,
-        status: {
-          ...prev.status,
-          [imageKey]: 'complete'
+      setGenerationProgress(prev => {
+        const newStatus = { ...prev.status, [imageKey]: 'complete' }
+        const completedCount = Object.values(newStatus).filter(s => s === 'complete').length
+        return {
+          ...prev,
+          current: completedCount,
+          status: newStatus
         }
-      }))
+      })
     } catch (error) {
       console.error(`Regenerate image ${imageKey} error:`, error)
       alert(`Failed to regenerate image: ${error.message}`)
@@ -280,12 +327,23 @@ function App() {
       }
     }))
 
+    // Helper to update retry status
+    const onRetry = (attempt, max) => {
+      setVideoProgress(prev => ({
+        ...prev,
+        status: {
+          ...prev.status,
+          [videoId]: `retrying (${attempt}/${max})`
+        }
+      }))
+    }
+
     try {
       let result
       const currentImages = generatedImages // Ensure we have the latest images
 
       if (videoId === 'opening') {
-        result = await generateOpeningVideo(currentImages)
+        result = await generateOpeningVideoWithRetry(currentImages, null, onRetry)
       } else {
         // Parse video ID (e.g., "spread-1-2" -> spread 1 and 2)
         const match = videoId.match(/spread-(\d+)-(\d+)/)
@@ -300,9 +358,11 @@ function App() {
           throw new Error('Required images not found for this video')
         }
 
-        result = await generateFlipVideo(
+        result = await generateFlipVideoWithRetry(
           currentImages[startSpreadKey],
-          currentImages[endSpreadKey]
+          currentImages[endSpreadKey],
+          null,
+          onRetry
         )
       }
 
@@ -324,13 +384,15 @@ function App() {
         return next
       })
 
-      setVideoProgress(prev => ({
-        ...prev,
-        status: {
-          ...prev.status,
-          [videoId]: 'complete'
+      setVideoProgress(prev => {
+        const newStatus = { ...prev.status, [videoId]: 'complete' }
+        const completedCount = Object.values(newStatus).filter(s => s === 'complete').length
+        return {
+          ...prev,
+          current: completedCount,
+          status: newStatus
         }
-      }))
+      })
     } catch (error) {
       console.error(`Regenerate video ${videoId} error:`, error)
       alert(`Failed to regenerate video: ${error.message}`)

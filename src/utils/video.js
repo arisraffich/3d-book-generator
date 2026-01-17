@@ -2,6 +2,23 @@ import { saveToIndexedDB, loadFromIndexedDB } from './indexedDB'
 
 const REPLICATE_API_KEY = import.meta.env.VITE_REPLICATE_API_KEY
 const REPLICATE_API_BASE_URL = 'https://api.replicate.com/v1'
+const MAX_RETRIES = 3
+
+// Check if error is permanent (should not retry)
+function isPermanentError(error) {
+  const message = error.message?.toLowerCase() || ''
+  return message.includes('401') || 
+         message.includes('403') || 
+         message.includes('api key') ||
+         message.includes('quota') ||
+         message.includes('invalid') ||
+         message.includes('not configured')
+}
+
+// Sleep helper for exponential backoff
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
 // Use proxy in development (Vite) and production (Cloudflare Function) to avoid CORS
 const REPLICATE_API_URL = import.meta.env.DEV
@@ -232,6 +249,70 @@ export async function generateFlipVideo(startSpread, endSpread, onProgress) {
   }
 }
 
+// Generate opening video with auto-retry
+export async function generateOpeningVideoWithRetry(generatedImages, onProgress, onRetry = null) {
+  let lastError
+  
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await generateOpeningVideo(generatedImages, onProgress)
+    } catch (error) {
+      lastError = error
+      
+      if (isPermanentError(error)) {
+        console.error(`Permanent error, not retrying: ${error.message}`)
+        throw error
+      }
+      
+      if (attempt < MAX_RETRIES) {
+        const delay = Math.pow(2, attempt) * 1000
+        console.log(`Opening video attempt ${attempt}/${MAX_RETRIES} failed, retrying in ${delay/1000}s...`)
+        
+        if (onRetry) {
+          onRetry(attempt, MAX_RETRIES)
+        }
+        
+        await sleep(delay)
+      }
+    }
+  }
+  
+  console.error(`All ${MAX_RETRIES} attempts failed for opening video`)
+  throw lastError
+}
+
+// Generate flip video with auto-retry
+export async function generateFlipVideoWithRetry(startSpread, endSpread, onProgress, onRetry = null) {
+  let lastError
+  
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await generateFlipVideo(startSpread, endSpread, onProgress)
+    } catch (error) {
+      lastError = error
+      
+      if (isPermanentError(error)) {
+        console.error(`Permanent error, not retrying: ${error.message}`)
+        throw error
+      }
+      
+      if (attempt < MAX_RETRIES) {
+        const delay = Math.pow(2, attempt) * 1000
+        console.log(`Flip video attempt ${attempt}/${MAX_RETRIES} failed, retrying in ${delay/1000}s...`)
+        
+        if (onRetry) {
+          onRetry(attempt, MAX_RETRIES)
+        }
+        
+        await sleep(delay)
+      }
+    }
+  }
+  
+  console.error(`All ${MAX_RETRIES} attempts failed for flip video`)
+  throw lastError
+}
+
 // Generate all videos
 export async function generateAllVideos(generatedImages, onProgressUpdate, onVideoGenerated) {
   const generatedVideos = {}
@@ -260,9 +341,16 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
     currentProgress.status['opening'] = 'generating'
     onProgressUpdate({ ...currentProgress })
 
-    const result = await generateOpeningVideo(generatedImages, (logs) => {
-      // Could parse logs for detailed progress if needed
-    })
+    const result = await generateOpeningVideoWithRetry(
+      generatedImages, 
+      (logs) => {
+        // Could parse logs for detailed progress if needed
+      },
+      (attempt, max) => {
+        currentProgress.status['opening'] = `retrying (${attempt}/${max})`
+        onProgressUpdate({ ...currentProgress })
+      }
+    )
 
     generatedVideos['opening'] = {
       url: result.url,
@@ -307,11 +395,15 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
       currentProgress.status[videoId] = 'generating'
       onProgressUpdate({ ...currentProgress })
 
-      const result = await generateFlipVideo(
+      const result = await generateFlipVideoWithRetry(
         generatedImages[currentSpreadKey],
         generatedImages[nextSpreadKey],
         (logs) => {
           // Could parse logs for detailed progress if needed
+        },
+        (attempt, max) => {
+          currentProgress.status[videoId] = `retrying (${attempt}/${max})`
+          onProgressUpdate({ ...currentProgress })
         }
       )
 

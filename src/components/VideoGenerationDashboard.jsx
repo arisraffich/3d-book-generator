@@ -14,6 +14,7 @@ function VideoGenerationDashboard({
   const [previewVideoId, setPreviewVideoId] = useState(null)
 
   function getStatusIcon(status) {
+    if (status?.startsWith('retrying')) return '🔄'
     switch (status) {
       case 'complete':
         return '✅'
@@ -23,6 +24,24 @@ function VideoGenerationDashboard({
         return '❌'
       default:
         return '⬜'
+    }
+  }
+
+  function getStatusText(status) {
+    if (status?.startsWith('retrying')) {
+      const match = status.match(/retrying \((\d+)\/(\d+)\)/)
+      if (match) return `Retrying (${match[1]}/${match[2]})...`
+      return 'Retrying...'
+    }
+    switch (status) {
+      case 'complete':
+        return 'Downloaded ✓'
+      case 'generating':
+        return 'Generating...'
+      case 'failed':
+        return 'Failed (after 3 attempts)'
+      default:
+        return 'Pending...'
     }
   }
 
@@ -69,9 +88,7 @@ function VideoGenerationDashboard({
           </div>
         )}
         <div className="status-details">
-          {openingStatus === 'complete' ? 'Downloaded ✓' :
-            openingStatus === 'generating' ? 'Generating...' :
-              openingStatus === 'failed' ? 'Failed' : 'Pending...'}
+          {getStatusText(openingStatus)}
         </div>
         {(openingStatus === 'complete' || openingStatus === 'failed') && (
           <button
@@ -116,9 +133,7 @@ function VideoGenerationDashboard({
             </div>
           )}
           <div className="status-details">
-            {videoStatus === 'complete' ? 'Downloaded ✓' :
-              videoStatus === 'generating' ? 'Generating...' :
-                videoStatus === 'failed' ? 'Failed' : 'Pending...'}
+            {getStatusText(videoStatus)}
           </div>
           {(videoStatus === 'complete' || videoStatus === 'failed') && (
             <button
@@ -135,7 +150,12 @@ function VideoGenerationDashboard({
     return items
   }
 
-  if (!isGeneratingVideos && videoProgress.current === videoProgress.total && videoProgress.total > 0) {
+  // Check completion by status values, not counter (handles regenerated videos properly)
+  const allComplete = videoProgress.total > 0 && 
+    Object.keys(videoProgress.status).length === videoProgress.total &&
+    Object.values(videoProgress.status).every(s => s === 'complete')
+
+  if (!isGeneratingVideos && allComplete) {
     // Completion view
     return (
       <div className="dashboard-container">

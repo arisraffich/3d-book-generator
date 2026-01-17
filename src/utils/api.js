@@ -1,6 +1,23 @@
 import { saveToIndexedDB } from './indexedDB'
 
 const API_KEY = import.meta.env.VITE_NANO_BANANA_API_KEY
+const MAX_RETRIES = 3
+
+// Check if error is permanent (should not retry)
+function isPermanentError(error) {
+  const message = error.message?.toLowerCase() || ''
+  return message.includes('401') || 
+         message.includes('403') || 
+         message.includes('api key') ||
+         message.includes('quota') ||
+         message.includes('invalid') ||
+         message.includes('not configured')
+}
+
+// Sleep helper for exponential backoff
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 const API_BASE_URL = import.meta.env.VITE_NANO_BANANA_API_URL || 'https://generativelanguage.googleapis.com'
 
 // Use proxy in development to avoid CORS, direct URL in production
@@ -233,6 +250,40 @@ export async function generateImage(prompt, images = {}) {
   }
 }
 
+// Generate image with auto-retry (3 attempts with exponential backoff)
+export async function generateImageWithRetry(prompt, images = {}, onRetry = null) {
+  let lastError
+  
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await generateImage(prompt, images)
+    } catch (error) {
+      lastError = error
+      
+      // Don't retry on permanent errors
+      if (isPermanentError(error)) {
+        console.error(`Permanent error, not retrying: ${error.message}`)
+        throw error
+      }
+      
+      // If we have more attempts, wait and retry
+      if (attempt < MAX_RETRIES) {
+        const delay = Math.pow(2, attempt) * 1000 // 2s, 4s, 8s
+        console.log(`Attempt ${attempt}/${MAX_RETRIES} failed, retrying in ${delay/1000}s...`)
+        
+        if (onRetry) {
+          onRetry(attempt, MAX_RETRIES)
+        }
+        
+        await sleep(delay)
+      }
+    }
+  }
+  
+  console.error(`All ${MAX_RETRIES} attempts failed`)
+  throw lastError
+}
+
 export async function generateAllImages(extractedPages, onProgressUpdate, onImageGenerated) {
   const generatedImages = {}
   const spreadCount = Math.floor((Object.keys(extractedPages).length - 1) / 2)
@@ -261,9 +312,14 @@ export async function generateAllImages(extractedPages, onProgressUpdate, onImag
       throw new Error('Cover page not found')
     }
 
-    const coverUrl = await generateImage(PROMPT_1_COVER, {
-      image: coverPage.base64
-    })
+    const coverUrl = await generateImageWithRetry(
+      PROMPT_1_COVER, 
+      { image: coverPage.base64 },
+      (attempt, max) => {
+        currentProgress.status['cover'] = `retrying (${attempt}/${max})`
+        onProgressUpdate({ ...currentProgress })
+      }
+    )
 
     generatedImages['cover'] = {
       url: coverUrl,
@@ -299,11 +355,18 @@ export async function generateAllImages(extractedPages, onProgressUpdate, onImag
       throw new Error('Missing pages for spread 1')
     }
 
-    spread1Url = await generateImage(PROMPT_2_FIRST_INTERIOR, {
-      reference_image: generatedImages['cover'].url,
-      left_page_image: leftPage.base64,
-      right_page_image: rightPage.base64
-    })
+    spread1Url = await generateImageWithRetry(
+      PROMPT_2_FIRST_INTERIOR, 
+      {
+        reference_image: generatedImages['cover'].url,
+        left_page_image: leftPage.base64,
+        right_page_image: rightPage.base64
+      },
+      (attempt, max) => {
+        currentProgress.status['spread-1'] = `retrying (${attempt}/${max})`
+        onProgressUpdate({ ...currentProgress })
+      }
+    )
 
     generatedImages['spread-1'] = {
       url: spread1Url,
@@ -352,11 +415,18 @@ async function generateSpread(spreadNum, spread1Reference, leftPage, rightPage, 
     currentProgress.status[`spread-${spreadNum}`] = 'generating'
     onProgressUpdate({ ...currentProgress })
 
-    const spreadUrl = await generateImage(PROMPT_3_REMAINING_INTERIORS, {
-      reference_image: spread1Reference,
-      left_page_image: leftPage.base64,
-      right_page_image: rightPage.base64
-    })
+    const spreadUrl = await generateImageWithRetry(
+      PROMPT_3_REMAINING_INTERIORS, 
+      {
+        reference_image: spread1Reference,
+        left_page_image: leftPage.base64,
+        right_page_image: rightPage.base64
+      },
+      (attempt, max) => {
+        currentProgress.status[`spread-${spreadNum}`] = `retrying (${attempt}/${max})`
+        onProgressUpdate({ ...currentProgress })
+      }
+    )
 
     generatedImages[`spread-${spreadNum}`] = {
       url: spreadUrl,

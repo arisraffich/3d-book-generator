@@ -8,6 +8,7 @@ function GenerationDashboard({
   onRegenerateImage
 }) {
   function getStatusIcon(status) {
+    if (status?.startsWith('retrying')) return '🔄'
     switch (status) {
       case 'complete':
         return '✅'
@@ -17,6 +18,24 @@ function GenerationDashboard({
         return '❌'
       default:
         return '⬜'
+    }
+  }
+
+  function getStatusText(status) {
+    if (status?.startsWith('retrying')) {
+      const match = status.match(/retrying \((\d+)\/(\d+)\)/)
+      if (match) return `Retrying (${match[1]}/${match[2]})...`
+      return 'Retrying...'
+    }
+    switch (status) {
+      case 'complete':
+        return 'Downloaded ✓'
+      case 'generating':
+        return 'Generating...'
+      case 'failed':
+        return 'Failed (after 3 attempts)'
+      default:
+        return 'Pending...'
     }
   }
 
@@ -40,9 +59,7 @@ function GenerationDashboard({
           />
         )}
         <div className="status-details">
-          {coverStatus === 'complete' ? 'Downloaded ✓' :
-            coverStatus === 'generating' ? 'Generating...' :
-              coverStatus === 'failed' ? 'Failed' : 'Pending...'}
+          {getStatusText(coverStatus)}
         </div>
         {(coverStatus === 'complete' || coverStatus === 'failed') && onRegenerateImage && (
           <button
@@ -73,9 +90,7 @@ function GenerationDashboard({
             />
           )}
           <div className="status-details">
-            {spreadStatus === 'complete' ? 'Downloaded ✓' :
-              spreadStatus === 'generating' ? 'Generating...' :
-                spreadStatus === 'failed' ? 'Failed' : 'Pending...'}
+            {getStatusText(spreadStatus)}
           </div>
           {(spreadStatus === 'complete' || spreadStatus === 'failed') && onRegenerateImage && (
             <button
@@ -92,7 +107,12 @@ function GenerationDashboard({
     return items
   }
 
-  if (!isGenerating && progress.current === progress.total && progress.total > 0) {
+  // Check completion by status values, not counter (handles regenerated images properly)
+  const allComplete = progress.total > 0 && 
+    Object.keys(progress.status).length === progress.total &&
+    Object.values(progress.status).every(s => s === 'complete')
+
+  if (!isGenerating && allComplete) {
     // Completion view
     return (
       <div className="dashboard-container">
