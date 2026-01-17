@@ -5,12 +5,18 @@ const REPLICATE_API_BASE_URL = 'https://api.replicate.com/v1'
 const MAX_RETRIES = 3
 
 // Check if error is permanent (should not retry)
+// NOTE: 429 rate limits are retryable - don't treat them as permanent
 function isPermanentError(error) {
   const message = error.message?.toLowerCase() || ''
+  
+  // 429 rate limits are NOT permanent - they should be retried
+  if (message.includes('429') || message.includes('rate') || message.includes('resource_exhausted')) {
+    return false
+  }
+  
   return message.includes('401') || 
          message.includes('403') || 
          message.includes('api key') ||
-         message.includes('quota') ||
          message.includes('invalid') ||
          message.includes('not configured')
 }
@@ -56,8 +62,16 @@ function convertDataUrlToBlobUrl(dataUrl) {
   return dataUrl
 }
 
-// Get the latest model version
+// Cache for model version - avoid fetching multiple times
+let cachedModelVersion = null
+
+// Get the latest model version (cached)
 async function getModelVersion() {
+  // Return cached version if available
+  if (cachedModelVersion) {
+    return cachedModelVersion
+  }
+
   if (!REPLICATE_API_KEY) {
     throw new Error('Replicate API key not configured. Please set VITE_REPLICATE_API_KEY in .env')
   }
@@ -79,7 +93,8 @@ async function getModelVersion() {
 
   // Extract latest version ID from model.latest_version.id
   if (modelData.latest_version && modelData.latest_version.id) {
-    return modelData.latest_version.id
+    cachedModelVersion = modelData.latest_version.id  // Cache it
+    return cachedModelVersion
   }
 
   throw new Error('No latest version found in model data')
@@ -337,12 +352,12 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
   for (let i = 1; i <= flipCount; i++) {
     currentProgress.status[`spread-${i}-${i + 1}`] = 'pending'
   }
-  onProgressUpdate({ ...currentProgress })
+  onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
 
   // Step 1: Generate Opening Video (sequential - just one)
   try {
     currentProgress.status['opening'] = 'generating'
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
 
     const result = await generateOpeningVideoWithRetry(
       generatedImages, 
@@ -351,7 +366,7 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
       },
       (attempt, max) => {
         currentProgress.status['opening'] = `retrying (${attempt}/${max})`
-        onProgressUpdate({ ...currentProgress })
+        onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
       }
     )
 
@@ -367,7 +382,7 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
 
     currentProgress.status['opening'] = 'complete'
     currentProgress.current = 1
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
     await saveToIndexedDB('generatedVideos', generatedVideos)
 
     if (onVideoGenerated) {
@@ -376,7 +391,7 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
   } catch (error) {
     console.error('Opening video generation error:', error)
     currentProgress.status['opening'] = 'failed'
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
     throw error
   }
 
@@ -413,7 +428,7 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
     for (const task of batch) {
       currentProgress.status[task.videoId] = 'generating'
     }
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
 
     // Generate all videos in batch in parallel
     const batchPromises = batch.map(task => 
@@ -446,7 +461,7 @@ async function generateFlipVideoTask(task, generatedVideos, currentProgress, onP
       },
       (attempt, max) => {
         currentProgress.status[videoId] = `retrying (${attempt}/${max})`
-        onProgressUpdate({ ...currentProgress })
+        onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
       }
     )
 
@@ -462,7 +477,7 @@ async function generateFlipVideoTask(task, generatedVideos, currentProgress, onP
 
     currentProgress.status[videoId] = 'complete'
     currentProgress.current += 1
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
     await saveToIndexedDB('generatedVideos', generatedVideos)
 
     if (onVideoGenerated) {
@@ -471,7 +486,7 @@ async function generateFlipVideoTask(task, generatedVideos, currentProgress, onP
   } catch (error) {
     console.error(`Flip video ${videoId} generation error:`, error)
     currentProgress.status[videoId] = 'failed'
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
     // Don't throw - allow other videos in batch to continue
   }
 }

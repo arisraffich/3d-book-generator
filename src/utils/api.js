@@ -4,12 +4,18 @@ const API_KEY = import.meta.env.VITE_NANO_BANANA_API_KEY
 const MAX_RETRIES = 3
 
 // Check if error is permanent (should not retry)
+// NOTE: 429 rate limits contain "quota exceeded" but ARE retryable - don't match "quota"
 function isPermanentError(error) {
   const message = error.message?.toLowerCase() || ''
+  
+  // 429 rate limits are NOT permanent - they should be retried
+  if (message.includes('429') || message.includes('rate') || message.includes('resource_exhausted')) {
+    return false
+  }
+  
   return message.includes('401') || 
          message.includes('403') || 
          message.includes('api key') ||
-         message.includes('quota') ||
          message.includes('invalid') ||
          message.includes('not configured')
 }
@@ -300,12 +306,12 @@ export async function generateAllImages(extractedPages, onProgressUpdate, onImag
   for (let i = 1; i <= spreadCount; i++) {
     currentProgress.status[`spread-${i}`] = 'pending'
   }
-  onProgressUpdate({ ...currentProgress })
+  onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
 
   // Step 1: Generate Cover
   try {
     currentProgress.status['cover'] = 'generating'
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
 
     const coverPage = extractedPages['Cover Page']
     if (!coverPage) {
@@ -317,7 +323,7 @@ export async function generateAllImages(extractedPages, onProgressUpdate, onImag
       { image: coverPage.base64 },
       (attempt, max) => {
         currentProgress.status['cover'] = `retrying (${attempt}/${max})`
-        onProgressUpdate({ ...currentProgress })
+        onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
       }
     )
 
@@ -329,7 +335,7 @@ export async function generateAllImages(extractedPages, onProgressUpdate, onImag
 
     currentProgress.status['cover'] = 'complete'
     currentProgress.current = 1
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
     await saveToIndexedDB('generatedImages', generatedImages)
 
     if (onImageGenerated) {
@@ -338,7 +344,7 @@ export async function generateAllImages(extractedPages, onProgressUpdate, onImag
   } catch (error) {
     console.error('Cover generation error:', error)
     currentProgress.status['cover'] = 'failed'
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
     throw error
   }
 
@@ -346,7 +352,7 @@ export async function generateAllImages(extractedPages, onProgressUpdate, onImag
   let spread1Url = null
   try {
     currentProgress.status['spread-1'] = 'generating'
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
 
     const leftPage = extractedPages['1-left']
     const rightPage = extractedPages['1-right']
@@ -364,7 +370,7 @@ export async function generateAllImages(extractedPages, onProgressUpdate, onImag
       },
       (attempt, max) => {
         currentProgress.status['spread-1'] = `retrying (${attempt}/${max})`
-        onProgressUpdate({ ...currentProgress })
+        onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
       }
     )
 
@@ -376,7 +382,7 @@ export async function generateAllImages(extractedPages, onProgressUpdate, onImag
 
     currentProgress.status['spread-1'] = 'complete'
     currentProgress.current = 2
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
     await saveToIndexedDB('generatedImages', generatedImages)
 
     if (onImageGenerated) {
@@ -385,7 +391,7 @@ export async function generateAllImages(extractedPages, onProgressUpdate, onImag
   } catch (error) {
     console.error('Spread 1 generation error:', error)
     currentProgress.status['spread-1'] = 'failed'
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
     throw error
   }
 
@@ -413,7 +419,7 @@ export async function generateAllImages(extractedPages, onProgressUpdate, onImag
 async function generateSpread(spreadNum, spread1Reference, leftPage, rightPage, generatedImages, currentProgress, onProgressUpdate, onImageGenerated) {
   try {
     currentProgress.status[`spread-${spreadNum}`] = 'generating'
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
 
     const spreadUrl = await generateImageWithRetry(
       PROMPT_3_REMAINING_INTERIORS, 
@@ -424,7 +430,7 @@ async function generateSpread(spreadNum, spread1Reference, leftPage, rightPage, 
       },
       (attempt, max) => {
         currentProgress.status[`spread-${spreadNum}`] = `retrying (${attempt}/${max})`
-        onProgressUpdate({ ...currentProgress })
+        onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
       }
     )
 
@@ -436,7 +442,7 @@ async function generateSpread(spreadNum, spread1Reference, leftPage, rightPage, 
 
     currentProgress.status[`spread-${spreadNum}`] = 'complete'
     currentProgress.current += 1
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
     await saveToIndexedDB('generatedImages', generatedImages)
 
     if (onImageGenerated) {
@@ -445,7 +451,7 @@ async function generateSpread(spreadNum, spread1Reference, leftPage, rightPage, 
   } catch (error) {
     console.error(`Spread ${spreadNum} generation error:`, error)
     currentProgress.status[`spread-${spreadNum}`] = 'failed'
-    onProgressUpdate({ ...currentProgress })
+    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
     // Continue with other spreads even if one fails
   }
 }
