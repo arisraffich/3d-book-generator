@@ -64,11 +64,40 @@ function convertDataUrlToBlobUrl(dataUrl) {
   return dataUrl
 }
 
+// Cache for model version
+let cachedModelVersion = null
+
+async function getModelVersion() {
+  if (cachedModelVersion) return cachedModelVersion
+
+  const response = await fetch(`${REPLICATE_API_URL}/models/${MODEL}`, {
+    headers: {
+      'Authorization': `Token ${REPLICATE_API_KEY}`,
+      'Content-Type': 'application/json'
+    }
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Failed to fetch model: ${response.status} - ${errorText}`)
+  }
+
+  const modelData = await response.json()
+  if (modelData.latest_version && modelData.latest_version.id) {
+    cachedModelVersion = modelData.latest_version.id
+    return cachedModelVersion
+  }
+
+  throw new Error('No latest version found for model')
+}
+
 // Create a prediction on Replicate
 async function createPrediction(input) {
   if (!REPLICATE_API_KEY) {
     throw new Error('Replicate API key not configured. Please set VITE_REPLICATE_API_KEY in .env')
   }
+
+  const version = await getModelVersion()
 
   const response = await fetch(`${REPLICATE_API_URL}/predictions`, {
     method: 'POST',
@@ -77,7 +106,7 @@ async function createPrediction(input) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: MODEL,
+      version: version,
       input: input
     })
   })
