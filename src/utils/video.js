@@ -193,7 +193,8 @@ export async function generateOpeningVideo(generatedImages, onProgress) {
     aspect_ratio: '1:1',
     fps: 24,
     prompt_upsampling: false,
-    disable_safety_filter: true
+    disable_safety_filter: true,
+    save_audio: false
   }
 
   // Create prediction
@@ -233,7 +234,8 @@ export async function generateFlipVideo(startSpread, endSpread, onProgress) {
     aspect_ratio: '1:1',
     fps: 24,
     prompt_upsampling: false,
-    disable_safety_filter: true
+    disable_safety_filter: true,
+    save_audio: false
   }
 
   // Create prediction
