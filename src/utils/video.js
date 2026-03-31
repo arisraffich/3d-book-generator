@@ -31,7 +31,7 @@ const REPLICATE_API_URL = import.meta.env.DEV
   ? '/replicate-api/v1'  // Use Vite proxy in development
   : '/api/replicate'     // Use Cloudflare Function in production
 
-const MODEL = 'bytedance/seedance-1-pro'
+const MODEL = 'prunaai/p-video'
 
 // Prompts
 const PROMPT_OPENING = `Create a video showing a book opening from closed to revealing the first interior page spread.
@@ -62,52 +62,11 @@ function convertDataUrlToBlobUrl(dataUrl) {
   return dataUrl
 }
 
-// Cache for model version - avoid fetching multiple times
-let cachedModelVersion = null
-
-// Get the latest model version (cached)
-async function getModelVersion() {
-  // Return cached version if available
-  if (cachedModelVersion) {
-    return cachedModelVersion
-  }
-
-  if (!REPLICATE_API_KEY) {
-    throw new Error('Replicate API key not configured. Please set VITE_REPLICATE_API_KEY in .env')
-  }
-
-  // Get model info - this endpoint includes latest_version
-  const response = await fetch(`${REPLICATE_API_URL}/models/${MODEL}`, {
-    headers: {
-      'Authorization': `Token ${REPLICATE_API_KEY}`,
-      'Content-Type': 'application/json'
-    }
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Failed to fetch model: ${response.status} - ${errorText}`)
-  }
-
-  const modelData = await response.json()
-
-  // Extract latest version ID from model.latest_version.id
-  if (modelData.latest_version && modelData.latest_version.id) {
-    cachedModelVersion = modelData.latest_version.id  // Cache it
-    return cachedModelVersion
-  }
-
-  throw new Error('No latest version found in model data')
-}
-
 // Create a prediction on Replicate
 async function createPrediction(input) {
   if (!REPLICATE_API_KEY) {
     throw new Error('Replicate API key not configured. Please set VITE_REPLICATE_API_KEY in .env')
   }
-
-  // Get the latest model version
-  const version = await getModelVersion()
 
   const response = await fetch(`${REPLICATE_API_URL}/predictions`, {
     method: 'POST',
@@ -116,7 +75,7 @@ async function createPrediction(input) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      version: version,
+      model: MODEL,
       input: input
     })
   })
@@ -204,7 +163,8 @@ export async function generateOpeningVideo(generatedImages, onProgress) {
     resolution: '1080p',
     aspect_ratio: '1:1',
     fps: 24,
-    camera_fixed: false
+    prompt_upsampling: false,
+    disable_safety_filter: true
   }
 
   // Create prediction
@@ -243,7 +203,8 @@ export async function generateFlipVideo(startSpread, endSpread, onProgress) {
     resolution: '1080p',
     aspect_ratio: '1:1',
     fps: 24,
-    camera_fixed: false
+    prompt_upsampling: false,
+    disable_safety_filter: true
   }
 
   // Create prediction
