@@ -435,6 +435,30 @@ body {
   cursor: not-allowed;
 }
 
+.status-image.clickable {
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.status-image.clickable:hover {
+  opacity: 0.85;
+}
+
+.image-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.preview-full-image {
+  max-width: 90vw;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
 /* Modal Styles */
 .modal-overlay {
   position: fixed;

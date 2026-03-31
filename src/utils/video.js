@@ -50,7 +50,8 @@ CRITICAL RULES:
 2. Illustrations may have very subtle, gentle movement but characters must keep their exact shape, proportions, and features. No morphing, no deformation.
 3. All text must remain perfectly sharp, legible, and undistorted.
 4. No human hands or objects in the scene.
-5. Same lighting, camera angle, and environment throughout.`
+5. Same lighting, camera angle, and environment throughout.
+6. Do not add any additional pages, text, or images other than those in the first and last frames.`
 
 // Helper function to convert data URL to blob URL for Replicate
 function convertDataUrlToBlobUrl(dataUrl) {

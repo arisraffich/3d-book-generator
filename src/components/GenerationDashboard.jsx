@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 
 function GenerationDashboard({
   generatedImages,
@@ -8,6 +9,15 @@ function GenerationDashboard({
   onRegenerateImage,
   onGenerateSingleVideo
 }) {
+  const [previewImage, setPreviewImage] = useState(null)
+
+  useEffect(() => {
+    function handleEsc(e) {
+      if (e.key === 'Escape') setPreviewImage(null)
+    }
+    document.addEventListener('keydown', handleEsc)
+    return () => document.removeEventListener('keydown', handleEsc)
+  }, [])
   function getStatusIcon(status) {
     if (status?.startsWith('retrying')) return '🔄'
     switch (status) {
@@ -56,7 +66,8 @@ function GenerationDashboard({
           <img
             src={generatedImages['cover'].url}
             alt="Cover"
-            className="status-image"
+            className="status-image clickable"
+            onClick={() => setPreviewImage({ url: generatedImages['cover'].url, label: 'Cover' })}
           />
         )}
         <div className="status-details">
@@ -98,7 +109,8 @@ function GenerationDashboard({
             <img
               src={generatedImages[spreadKey].url}
               alt={`Spread ${i}`}
-              className="status-image"
+              className="status-image clickable"
+              onClick={() => setPreviewImage({ url: generatedImages[spreadKey].url, label: `Spread ${i}` })}
             />
           )}
           <div className="status-details">
@@ -164,6 +176,7 @@ function GenerationDashboard({
             </button>
           </div>
         </div>
+        {previewImage && <ImagePreviewModal image={previewImage} onClose={() => setPreviewImage(null)} />}
       </div>
     )
   }
@@ -192,6 +205,19 @@ function GenerationDashboard({
         <div className="dashboard-subtitle" style={{ marginTop: '30px' }}>
           All images auto-downloading to your Downloads folder
         </div>
+      </div>
+      {previewImage && <ImagePreviewModal image={previewImage} onClose={() => setPreviewImage(null)} />}
+    </div>
+  )
+}
+
+function ImagePreviewModal({ image, onClose }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content image-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="close-btn" onClick={onClose}>✕</button>
+        <img src={image.url} alt={image.label} className="preview-full-image" />
+        <h3 style={{ marginTop: '12px', textAlign: 'center' }}>{image.label}</h3>
       </div>
     </div>
   )
