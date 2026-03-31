@@ -201,7 +201,7 @@ export async function generateImage(prompt, images = {}) {
       generationConfig: {
         responseModalities: ['TEXT', 'IMAGE'],
         imageConfig: {
-          aspectRatio: "1:1",
+          aspectRatio: "16:9",
           imageSize: "2K"
         }
       }

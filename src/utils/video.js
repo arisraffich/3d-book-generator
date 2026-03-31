@@ -31,7 +31,9 @@ const REPLICATE_API_URL = import.meta.env.DEV
   ? '/replicate-api/v1'  // Use Vite proxy in development
   : '/api/replicate'     // Use Cloudflare Function in production
 
-const MODEL = 'prunaai/p-video'
+const MODEL = 'google/veo-3.1-fast'
+
+const NEGATIVE_PROMPT = 'Text distortion, character deformation, blurry text, morphing illustrations, warping images, changing content on pages'
 
 // Prompts
 const PROMPT_OPENING = `Create a video showing a book opening from closed to revealing the first interior page spread.
@@ -62,40 +64,11 @@ function convertDataUrlToBlobUrl(dataUrl) {
   return dataUrl
 }
 
-// Cache for model version
-let cachedModelVersion = null
-
-async function getModelVersion() {
-  if (cachedModelVersion) return cachedModelVersion
-
-  const response = await fetch(`${REPLICATE_API_URL}/models/${MODEL}`, {
-    headers: {
-      'Authorization': `Token ${REPLICATE_API_KEY}`,
-      'Content-Type': 'application/json'
-    }
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Failed to fetch model: ${response.status} - ${errorText}`)
-  }
-
-  const modelData = await response.json()
-  if (modelData.latest_version && modelData.latest_version.id) {
-    cachedModelVersion = modelData.latest_version.id
-    return cachedModelVersion
-  }
-
-  throw new Error('No latest version found for model')
-}
-
 // Create a prediction on Replicate
 async function createPrediction(input) {
   if (!REPLICATE_API_KEY) {
     throw new Error('Replicate API key not configured. Please set VITE_REPLICATE_API_KEY in .env')
   }
-
-  const version = await getModelVersion()
 
   const response = await fetch(`${REPLICATE_API_URL}/predictions`, {
     method: 'POST',
@@ -104,7 +77,7 @@ async function createPrediction(input) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      version: version,
+      model: MODEL,
       input: input
     })
   })
@@ -187,14 +160,12 @@ export async function generateOpeningVideo(generatedImages, onProgress) {
   const input = {
     prompt: PROMPT_OPENING,
     image: firstFrame,
-    last_frame_image: lastFrame,
-    duration: 2,
+    last_frame: lastFrame,
+    duration: 4,
     resolution: '1080p',
-    aspect_ratio: '1:1',
-    fps: 24,
-    prompt_upsampling: false,
-    disable_safety_filter: true,
-    save_audio: false
+    aspect_ratio: '16:9',
+    negative_prompt: NEGATIVE_PROMPT,
+    generate_audio: false
   }
 
   // Create prediction
@@ -228,14 +199,12 @@ export async function generateFlipVideo(startSpread, endSpread, onProgress) {
   const input = {
     prompt: PROMPT_PAGE_FLIP,
     image: firstFrame,
-    last_frame_image: lastFrame,
-    duration: 3,
+    last_frame: lastFrame,
+    duration: 4,
     resolution: '1080p',
-    aspect_ratio: '1:1',
-    fps: 24,
-    prompt_upsampling: false,
-    disable_safety_filter: true,
-    save_audio: false
+    aspect_ratio: '16:9',
+    negative_prompt: NEGATIVE_PROMPT,
+    generate_audio: false
   }
 
   // Create prediction
@@ -378,7 +347,7 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
         downloadedAt: new Date().toISOString(),
         startFrame: 'cover',
         endFrame: 'spread-1',
-        duration: 2,
+        duration: 4,
         predictionId: result.predictionId
       }
 
@@ -476,7 +445,7 @@ async function generateFlipVideoTask(task, generatedVideos, currentProgress, onP
       downloadedAt: new Date().toISOString(),
       startFrame: currentSpreadKey,
       endFrame: nextSpreadKey,
-      duration: 3,
+      duration: 4,
       predictionId: result.predictionId
     }
 

@@ -352,7 +352,7 @@ function App() {
         url: result.url,
         filename: videoId === 'opening' ? 'opening.mp4' : `${videoId}.mp4`,
         downloadedAt: new Date().toISOString(),
-        duration: videoId === 'opening' ? 2 : 3,
+        duration: 4,
         predictionId: result.predictionId
       }
 
@@ -443,7 +443,7 @@ function App() {
         url: result.url,
         filename: videoId === 'opening' ? 'opening.mp4' : `${videoId}.mp4`,
         downloadedAt: new Date().toISOString(),
-        duration: videoId === 'opening' ? 2 : 3,
+        duration: 4,
         predictionId: result.predictionId
       }
 
