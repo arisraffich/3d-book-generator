@@ -5,7 +5,8 @@ function GenerationDashboard({
   progress,
   onUploadNew,
   onStartVideoGeneration,
-  onRegenerateImage
+  onRegenerateImage,
+  onGenerateSingleVideo
 }) {
   function getStatusIcon(status) {
     if (status?.startsWith('retrying')) return '🔄'
@@ -62,12 +63,23 @@ function GenerationDashboard({
           {getStatusText(coverStatus)}
         </div>
         {(coverStatus === 'complete' || coverStatus === 'failed') && onRegenerateImage && (
-          <button
-            className="regenerate-btn"
-            onClick={() => onRegenerateImage('cover')}
-          >
-            ↻ Regenerate
-          </button>
+          <div className="action-buttons">
+            <button
+              className="regenerate-btn"
+              onClick={() => onRegenerateImage('cover')}
+            >
+              ↻ Regenerate
+            </button>
+            {coverStatus === 'complete' && onGenerateSingleVideo && generatedImages['spread-1']?.url && (
+              <button
+                className="regenerate-btn video-btn"
+                onClick={() => onGenerateSingleVideo('cover')}
+                disabled={progress.status['cover-video'] === 'generating'}
+              >
+                {progress.status['cover-video'] === 'generating' ? '⏳ Generating...' : '🎬 Video'}
+              </button>
+            )}
+          </div>
         )}
       </div>
     )
@@ -93,12 +105,23 @@ function GenerationDashboard({
             {getStatusText(spreadStatus)}
           </div>
           {(spreadStatus === 'complete' || spreadStatus === 'failed') && onRegenerateImage && (
-            <button
-              className="regenerate-btn"
-              onClick={() => onRegenerateImage(spreadKey)}
-            >
-              ↻ Regenerate
-            </button>
+            <div className="action-buttons">
+              <button
+                className="regenerate-btn"
+                onClick={() => onRegenerateImage(spreadKey)}
+              >
+                ↻ Regenerate
+              </button>
+              {spreadStatus === 'complete' && onGenerateSingleVideo && i < total - 1 && generatedImages[`spread-${i + 1}`]?.url && (
+                <button
+                  className="regenerate-btn video-btn"
+                  onClick={() => onGenerateSingleVideo(spreadKey)}
+                  disabled={progress.status[`${spreadKey}-video`] === 'generating'}
+                >
+                  {progress.status[`${spreadKey}-video`] === 'generating' ? '⏳ Generating...' : '🎬 Video'}
+                </button>
+              )}
+            </div>
           )}
         </div>
       )

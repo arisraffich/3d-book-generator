@@ -191,7 +191,8 @@ function App() {
           } catch (error) {
             console.error('Video download error:', error)
           }
-        }
+        },
+        generatedVideos
       )
 
       setGeneratedVideos(videos)
@@ -296,6 +297,90 @@ function App() {
         status: {
           ...prev.status,
           [imageKey]: 'failed'
+        }
+      }))
+    }
+  }
+
+  async function handleGenerateSingleVideo(imageKey) {
+    // Determine video ID and type based on image key
+    let videoId, result
+
+    if (imageKey === 'cover') {
+      videoId = 'opening'
+      if (!generatedImages['cover'] || !generatedImages['spread-1']) {
+        alert('Both cover and spread 1 images are needed to generate the opening video.')
+        return
+      }
+    } else {
+      const spreadNum = parseInt(imageKey.replace('spread-', ''))
+      const nextSpreadKey = `spread-${spreadNum + 1}`
+      videoId = `spread-${spreadNum}-${spreadNum + 1}`
+      if (!generatedImages[imageKey] || !generatedImages[nextSpreadKey]) {
+        alert(`Both ${imageKey} and spread-${spreadNum + 1} images are needed to generate this video.`)
+        return
+      }
+    }
+
+    if (!confirm(`Generate video for ${imageKey}? This will use API credits.`)) {
+      return
+    }
+
+    // Update generation progress to show video is generating
+    setGenerationProgress(prev => ({
+      ...prev,
+      status: {
+        ...prev.status,
+        [`${imageKey}-video`]: 'generating'
+      }
+    }))
+
+    try {
+      if (imageKey === 'cover') {
+        result = await generateOpeningVideoWithRetry(generatedImages, null, null)
+      } else {
+        const spreadNum = parseInt(imageKey.replace('spread-', ''))
+        result = await generateFlipVideoWithRetry(
+          generatedImages[imageKey],
+          generatedImages[`spread-${spreadNum + 1}`],
+          null,
+          null
+        )
+      }
+
+      const videoInfo = {
+        url: result.url,
+        filename: videoId === 'opening' ? 'opening.mp4' : `${videoId}.mp4`,
+        downloadedAt: new Date().toISOString(),
+        duration: videoId === 'opening' ? 2 : 3,
+        predictionId: result.predictionId
+      }
+
+      await downloadVideo(result.url, videoInfo.filename)
+
+      setGeneratedVideos(prev => {
+        const next = { ...prev, [videoId]: videoInfo }
+        saveToIndexedDB('generatedVideos', next)
+        return next
+      })
+
+      setGenerationProgress(prev => ({
+        ...prev,
+        status: {
+          ...prev.status,
+          [`${imageKey}-video`]: 'complete'
+        }
+      }))
+
+      alert(`Video generated and downloaded: ${videoInfo.filename}`)
+    } catch (error) {
+      console.error(`Single video generation error for ${imageKey}:`, error)
+      alert(`Failed to generate video: ${error.message}`)
+      setGenerationProgress(prev => ({
+        ...prev,
+        status: {
+          ...prev.status,
+          [`${imageKey}-video`]: 'failed'
         }
       }))
     }
@@ -444,6 +529,7 @@ function App() {
           onUploadNew={handleUploadNew}
           onStartVideoGeneration={handleStartVideoGeneration}
           onRegenerateImage={handleRegenerateImage}
+          onGenerateSingleVideo={handleGenerateSingleVideo}
         />
       )}
 

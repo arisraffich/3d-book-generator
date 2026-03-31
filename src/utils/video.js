@@ -293,8 +293,9 @@ export async function generateFlipVideoWithRetry(startSpread, endSpread, onProgr
 const PARALLEL_BATCH_SIZE = 5
 
 // Generate all videos (with parallel batches for flip videos)
-export async function generateAllVideos(generatedImages, onProgressUpdate, onVideoGenerated) {
-  const generatedVideos = {}
+// Skips videos that already exist in existingVideos
+export async function generateAllVideos(generatedImages, onProgressUpdate, onVideoGenerated, existingVideos = {}) {
+  const generatedVideos = { ...existingVideos }
 
   // Count actual spread keys (spread-1, spread-2, etc.)
   const spreadCount = Object.keys(generatedImages).filter(k => k.startsWith('spread-')).length
@@ -302,58 +303,68 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
   const flipCount = spreadCount > 0 ? spreadCount - 1 : 0
   const totalVideos = 1 + flipCount
 
+  // Count already completed videos
+  const alreadyComplete = []
+  if (existingVideos['opening']) alreadyComplete.push('opening')
+  for (let i = 1; i <= flipCount; i++) {
+    if (existingVideos[`spread-${i}-${i + 1}`]) alreadyComplete.push(`spread-${i}-${i + 1}`)
+  }
+
   let currentProgress = {
-    current: 0,
+    current: alreadyComplete.length,
     total: totalVideos,
     status: {}
   }
 
-  // Initialize status
-  currentProgress.status['opening'] = 'pending'
+  // Initialize status — mark existing as complete, rest as pending
+  currentProgress.status['opening'] = existingVideos['opening'] ? 'complete' : 'pending'
   for (let i = 1; i <= flipCount; i++) {
-    currentProgress.status[`spread-${i}-${i + 1}`] = 'pending'
+    const videoId = `spread-${i}-${i + 1}`
+    currentProgress.status[videoId] = existingVideos[videoId] ? 'complete' : 'pending'
   }
   onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
 
-  // Step 1: Generate Opening Video (sequential - just one)
-  try {
-    currentProgress.status['opening'] = 'generating'
-    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
+  // Step 1: Generate Opening Video (skip if already exists)
+  if (!existingVideos['opening']) {
+    try {
+      currentProgress.status['opening'] = 'generating'
+      onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
 
-    const result = await generateOpeningVideoWithRetry(
-      generatedImages, 
-      (logs) => {
-        // Could parse logs for detailed progress if needed
-      },
-      (attempt, max) => {
-        currentProgress.status['opening'] = `retrying (${attempt}/${max})`
-        onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
+      const result = await generateOpeningVideoWithRetry(
+        generatedImages,
+        (logs) => {
+          // Could parse logs for detailed progress if needed
+        },
+        (attempt, max) => {
+          currentProgress.status['opening'] = `retrying (${attempt}/${max})`
+          onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
+        }
+      )
+
+      generatedVideos['opening'] = {
+        url: result.url,
+        filename: 'opening.mp4',
+        downloadedAt: new Date().toISOString(),
+        startFrame: 'cover',
+        endFrame: 'spread-1',
+        duration: 2,
+        predictionId: result.predictionId
       }
-    )
 
-    generatedVideos['opening'] = {
-      url: result.url,
-      filename: 'opening.mp4',
-      downloadedAt: new Date().toISOString(),
-      startFrame: 'cover',
-      endFrame: 'spread-1',
-      duration: 2,
-      predictionId: result.predictionId
+      currentProgress.status['opening'] = 'complete'
+      currentProgress.current += 1
+      onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
+      await saveToIndexedDB('generatedVideos', generatedVideos)
+
+      if (onVideoGenerated) {
+        await onVideoGenerated('opening', result.url, generatedVideos['opening'])
+      }
+    } catch (error) {
+      console.error('Opening video generation error:', error)
+      currentProgress.status['opening'] = 'failed'
+      onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
+      throw error
     }
-
-    currentProgress.status['opening'] = 'complete'
-    currentProgress.current = 1
-    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
-    await saveToIndexedDB('generatedVideos', generatedVideos)
-
-    if (onVideoGenerated) {
-      await onVideoGenerated('opening', result.url, generatedVideos['opening'])
-    }
-  } catch (error) {
-    console.error('Opening video generation error:', error)
-    currentProgress.status['opening'] = 'failed'
-    onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
-    throw error
   }
 
   // Step 2: Generate Flip Videos (in parallel batches of PARALLEL_BATCH_SIZE)
@@ -365,26 +376,28 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
       return numA - numB
     })
 
-  // Build array of all flip video tasks
+  // Build array of flip video tasks, skipping existing ones
   const flipTasks = []
   for (let i = 0; i < spreads.length - 1; i++) {
     const currentSpreadKey = spreads[i]
     const nextSpreadKey = spreads[i + 1]
     const videoId = `spread-${i + 1}-${i + 2}`
-    
-    flipTasks.push({
-      videoId,
-      currentSpreadKey,
-      nextSpreadKey,
-      startSpread: generatedImages[currentSpreadKey],
-      endSpread: generatedImages[nextSpreadKey]
-    })
+
+    if (!existingVideos[videoId]) {
+      flipTasks.push({
+        videoId,
+        currentSpreadKey,
+        nextSpreadKey,
+        startSpread: generatedImages[currentSpreadKey],
+        endSpread: generatedImages[nextSpreadKey]
+      })
+    }
   }
 
   // Process flip videos in parallel batches
   for (let batchStart = 0; batchStart < flipTasks.length; batchStart += PARALLEL_BATCH_SIZE) {
     const batch = flipTasks.slice(batchStart, batchStart + PARALLEL_BATCH_SIZE)
-    
+
     // Mark all videos in this batch as generating
     for (const task of batch) {
       currentProgress.status[task.videoId] = 'generating'
@@ -392,7 +405,7 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
     onProgressUpdate({ ...currentProgress, status: { ...currentProgress.status } })
 
     // Generate all videos in batch in parallel
-    const batchPromises = batch.map(task => 
+    const batchPromises = batch.map(task =>
       generateFlipVideoTask(
         task,
         generatedVideos,

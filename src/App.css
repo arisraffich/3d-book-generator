@@ -410,6 +410,31 @@ body {
   border-color: #bbb;
 }
 
+.action-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.action-buttons .regenerate-btn {
+  margin-top: 0;
+}
+
+.regenerate-btn.video-btn {
+  background: #e8e0f0;
+  border-color: #c8b8d8;
+}
+
+.regenerate-btn.video-btn:hover {
+  background: #d8c8e8;
+  border-color: #b0a0c0;
+}
+
+.regenerate-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Modal Styles */
 .modal-overlay {
   position: fixed;
