@@ -123,8 +123,8 @@ export async function generateImage(prompt, images = {}) {
     throw new Error('Google API key not configured. Please set VITE_NANO_BANANA_API_KEY in .env')
   }
 
-  // Nano Banana Pro model: gemini-3-pro-image-preview
-  const MODEL = 'gemini-3-pro-image-preview'
+  // Nano Banana 2 model: gemini-3.1-flash-image-preview
+  const MODEL = 'gemini-3.1-flash-image-preview'
   const endpoint = `/v1beta/models/${MODEL}:generateContent`
 
   try {
