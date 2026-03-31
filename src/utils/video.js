@@ -31,30 +31,26 @@ const REPLICATE_API_URL = import.meta.env.DEV
   ? '/replicate-api/v1'  // Use Vite proxy in development
   : '/api/replicate'     // Use Cloudflare Function in production
 
-const MODEL = 'google/veo-3.1-fast'
-
-const NEGATIVE_PROMPT = 'Text distortion, character deformation, blurry text, morphing illustrations, warping images, changing content on pages'
+const MODEL = 'bytedance/seedance-1.5-pro'
 
 // Prompts
-const PROMPT_OPENING = `Create a video showing a book opening from closed to revealing the first interior page spread.
-The entire book (including spine) rotates RIGHT by 90 degrees without opening. Then the book opens naturally and lays flat on the table surface, revealing interior pages.
+const PROMPT_OPENING = `A photorealistic video of a physical printed book. The closed book rotates RIGHT 90 degrees, then opens naturally and lays flat on the table, revealing the interior page spread.
 
-CRITICAL - Static Content:
-1. No human hands visible.
-2. All illustrations and text inside the book must remain completely still and frozen. No animated characters, no moving objects inside the pages. The images are printed on paper.
-3. All text sharp and readable
-4. DO NOT ADD OR CHANGE ANYTHING IN THE SCENE. KEEP ALL SAME`
+CRITICAL RULES:
+1. The ONLY major motion is the physical book rotating and opening.
+2. Illustrations may have very subtle, gentle movement but characters must keep their exact shape, proportions, and features. No morphing, no deformation.
+3. All text must remain perfectly sharp, legible, and undistorted.
+4. No human hands or objects touching the book.
+5. Same lighting, camera angle, and environment throughout.`
 
-const PROMPT_PAGE_FLIP = `Animate the book's interior book pages turning from one spread to the next.
-Right page lifts and turns LEFT, revealing next spread
-Left page stays anchored and stationary
+const PROMPT_PAGE_FLIP = `A photorealistic video of an open book with ONE single page turning. The right page lifts and turns LEFT to reveal the next spread. The left page stays flat and stationary.
 
-CRITICAL: 
-1. All illustrations and text inside the book must remain completely still and frozen. No animated characters, no moving objects inside the pages. The images are printed on paper.
-2. DO NOT add or change anything in the scene
-3. Page Turning RIGHT TO LEFT
-4. Only ONE SINGLE page turns (the right page)-NOT multiple pages, NOT a bunch of pages—just ONE page
-5. NO human hands, NO fingers, NO objects touching the page`
+CRITICAL RULES:
+1. Only ONE page turns — the right page lifts and turns left.
+2. Illustrations may have very subtle, gentle movement but characters must keep their exact shape, proportions, and features. No morphing, no deformation.
+3. All text must remain perfectly sharp, legible, and undistorted.
+4. No human hands or objects in the scene.
+5. Same lighting, camera angle, and environment throughout.`
 
 // Helper function to convert data URL to blob URL for Replicate
 function convertDataUrlToBlobUrl(dataUrl) {
@@ -189,11 +185,11 @@ export async function generateOpeningVideo(generatedImages, onProgress) {
   const input = {
     prompt: PROMPT_OPENING,
     image: firstFrame,
-    last_frame: lastFrame,
-    duration: 4,
+    last_frame_image: lastFrame,
+    duration: 5,
     resolution: '1080p',
-    aspect_ratio: '16:9',
-    negative_prompt: NEGATIVE_PROMPT,
+    aspect_ratio: '1:1',
+    camera_fixed: true,
     generate_audio: false
   }
 
@@ -228,11 +224,11 @@ export async function generateFlipVideo(startSpread, endSpread, onProgress) {
   const input = {
     prompt: PROMPT_PAGE_FLIP,
     image: firstFrame,
-    last_frame: lastFrame,
-    duration: 4,
+    last_frame_image: lastFrame,
+    duration: 5,
     resolution: '1080p',
-    aspect_ratio: '16:9',
-    negative_prompt: NEGATIVE_PROMPT,
+    aspect_ratio: '1:1',
+    camera_fixed: true,
     generate_audio: false
   }
 
@@ -376,7 +372,7 @@ export async function generateAllVideos(generatedImages, onProgressUpdate, onVid
         downloadedAt: new Date().toISOString(),
         startFrame: 'cover',
         endFrame: 'spread-1',
-        duration: 4,
+        duration: 5,
         predictionId: result.predictionId
       }
 
