@@ -31,7 +31,7 @@ const REPLICATE_API_URL = import.meta.env.DEV
   ? '/replicate-api/v1'  // Use Vite proxy in development
   : '/api/replicate'     // Use Cloudflare Function in production
 
-const MODEL = 'bytedance/seedance-1-pro'
+const MODEL = 'bytedance/seedance-1.5-pro'
 
 // Prompts
 const PROMPT_OPENING = `A photorealistic video of a physical printed book. The closed book rotates RIGHT 90 degrees, then opens naturally and lays flat on the table, revealing the interior page spread.
