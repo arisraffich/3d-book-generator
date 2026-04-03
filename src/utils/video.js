@@ -31,26 +31,27 @@ const REPLICATE_API_URL = import.meta.env.DEV
   ? '/replicate-api/v1'  // Use Vite proxy in development
   : '/api/replicate'     // Use Cloudflare Function in production
 
-const MODEL = 'bytedance/seedance-1.5-pro'
+const MODEL = 'bytedance/seedance-1-pro'
 
 // Prompts
 const PROMPT_OPENING = `A photorealistic video of a physical printed book. The closed book rotates RIGHT 90 degrees, then opens naturally and lays flat on the table, revealing the interior page spread.
 
 CRITICAL RULES:
 1. The ONLY major motion is the physical book rotating and opening.
-2. Illustrations may have very subtle, gentle movement but characters must keep their exact shape, proportions, and features. No morphing, no deformation.
+2. Illustrations may have very subtle, gentle movement, but characters must keep their exact shape, proportions, and features. No morphing, no deformation.
 3. All text must remain perfectly sharp, legible, and undistorted.
 4. No human hands or objects touching the book.
-5. Same lighting, camera angle, and environment throughout.`
+5. Maintain the exact same lighting, camera angle, and environment throughout the entire video.
+6. Do not add any additional elements, text, or images other than those in the first and last frames.`
 
 const PROMPT_PAGE_FLIP = `A photorealistic video of an open book with ONE single page turning. The right page lifts and turns LEFT to reveal the next spread. The left page stays flat and stationary.
 
 CRITICAL RULES:
-1. Only ONE page turns — the right page lifts and turns left.
-2. Illustrations may have very subtle, gentle movement but characters must keep their exact shape, proportions, and features. No morphing, no deformation.
+1. Only ONE page turns — the right page lifts and turns left. The flipping page has only one page thickness. All other pages stay completely fixed and stationary.
+2. Illustrations may have very subtle, very gentle movement, but characters must keep their exact shape, proportions, and features. No morphing, no deformation.
 3. All text must remain perfectly sharp, legible, and undistorted.
 4. No human hands or objects in the scene.
-5. Same lighting, camera angle, and environment throughout.
+5. Maintain the exact same lighting, camera angle, and environment throughout the entire video.
 6. Do not add any additional pages, text, or images other than those in the first and last frames.`
 
 // Helper function to convert data URL to blob URL for Replicate
