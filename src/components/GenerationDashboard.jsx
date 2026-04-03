@@ -4,10 +4,12 @@ function GenerationDashboard({
   generatedImages,
   isGenerating,
   progress,
+  currentPhase,
   onUploadNew,
   onStartVideoGeneration,
   onRegenerateImage,
-  onGenerateSingleVideo
+  onGenerateSingleVideo,
+  onContinueGeneration
 }) {
   const [previewImage, setPreviewImage] = useState(null)
 
@@ -142,8 +144,35 @@ function GenerationDashboard({
     return items
   }
 
+  // Review phase: cover + spread 1 done, waiting for user approval
+  if (currentPhase === 'review' && !isGenerating) {
+    return (
+      <div className="dashboard-container">
+        <div className="sidebar">
+          <div className="sidebar-title">3D BOOK RENDERS</div>
+          {renderGenerationStatus()}
+        </div>
+        <div className="center-dashboard">
+          <div className="dashboard-title">Review Cover & Spread 1</div>
+          <div className="dashboard-subtitle">
+            Please review the cover and first spread. If they look good, continue to generate the remaining spreads. If not, use the Regenerate buttons to redo them.
+          </div>
+          <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
+            <button className="button" onClick={onContinueGeneration}>
+              Continue — Generate Remaining Spreads
+            </button>
+            <button className="button secondary" onClick={onUploadNew}>
+              Upload Another Book
+            </button>
+          </div>
+        </div>
+        {previewImage && <ImagePreviewModal image={previewImage} onClose={() => setPreviewImage(null)} />}
+      </div>
+    )
+  }
+
   // Check completion by status values, not counter (handles regenerated images properly)
-  const allComplete = progress.total > 0 && 
+  const allComplete = progress.total > 0 &&
     Object.keys(progress.status).length === progress.total &&
     Object.values(progress.status).every(s => s === 'complete')
 
@@ -156,7 +185,7 @@ function GenerationDashboard({
           {renderGenerationStatus()}
         </div>
         <div className="center-dashboard">
-          <div className="dashboard-title">✅ All Images Generated!</div>
+          <div className="dashboard-title">All Images Generated!</div>
           <div className="dashboard-subtitle">
             {progress.total} images created and downloaded:
             <ul className="stats-list">
@@ -169,10 +198,10 @@ function GenerationDashboard({
           </div>
           <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
             <button className="button" onClick={onStartVideoGeneration}>
-              🎬 Generate Videos
+              Generate Videos
             </button>
             <button className="button secondary" onClick={onUploadNew}>
-              📚 Upload Another Book
+              Upload Another Book
             </button>
           </div>
         </div>

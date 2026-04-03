@@ -9,7 +9,7 @@ import { downloadImage } from './utils/download'
 import { generateAllVideos, downloadVideo, generateOpeningVideoWithRetry, generateFlipVideoWithRetry } from './utils/video'
 
 function App() {
-  const [currentPhase, setCurrentPhase] = useState('upload') // 'upload' | 'preview' | 'generating' | 'complete' | 'generating-videos' | 'videos-complete'
+  const [currentPhase, setCurrentPhase] = useState('upload') // 'upload' | 'preview' | 'generating' | 'review' | 'generating-remaining' | 'complete' | 'generating-videos' | 'videos-complete'
   const [extractedPages, setExtractedPages] = useState({})
   const [generatedImages, setGeneratedImages] = useState({})
   const [generatedVideos, setGeneratedVideos] = useState({})
@@ -66,9 +66,14 @@ function App() {
             status
           })
           
-          // Go to complete phase (allows regeneration of any pending/failed items)
-          // Video phase is ONLY entered when user clicks "Generate Videos" button
-          setCurrentPhase('complete')
+          // Determine phase: if only cover + spread-1, go to review; otherwise complete
+          const hasOnlyCoverAndSpread1 = completedCount <= 2 && !savedImages['spread-2']
+          const spreadCount2 = Math.floor((Object.keys(savedPages).length - 1) / 2)
+          if (hasOnlyCoverAndSpread1 && spreadCount2 > 1) {
+            setCurrentPhase('review')
+          } else {
+            setCurrentPhase('complete')
+          }
         } else {
           setCurrentPhase('preview')
         }
@@ -93,54 +98,94 @@ function App() {
   }
 
   async function handleStartGeneration() {
-    // Switch to generating phase
+    // Step 1: Generate cover + spread 1 only
     setCurrentPhase('generating')
     setIsGenerating(true)
 
-    // Calculate total items to generate
     const spreadCount = Math.floor((Object.keys(extractedPages).length - 1) / 2)
     const total = spreadCount + 1 // +1 for cover
 
-    // Initialize progress
     setGenerationProgress({
       current: 0,
       total,
       status: {}
     })
 
-    // Start generation directly from button click
     try {
-      const generated = await generateAllImages(
-        extractedPages,
-        (progressUpdate) => {
-          // Update progress as images generate
-          setGenerationProgress(progressUpdate)
-        },
-        async (imageKey, imageUrl) => {
-          // Update state incrementally so images can be previewed during generation
-          setGeneratedImages(prev => ({
+      // Generate Cover
+      const coverPage = extractedPages['Cover Page']
+      if (!coverPage) throw new Error('Cover page not found')
+
+      setGenerationProgress(prev => ({
+        ...prev,
+        status: { ...prev.status, cover: 'generating' }
+      }))
+
+      const coverUrl = await generateImageWithRetry(
+        PROMPT_1_COVER,
+        { image: coverPage.base64 },
+        (attempt, max) => {
+          setGenerationProgress(prev => ({
             ...prev,
-            [imageKey]: {
-              url: imageUrl,
-              generatedAt: new Date().toISOString(),
-              downloaded: true
-            }
+            status: { ...prev.status, cover: `retrying (${attempt}/${max})` }
           }))
-          
-          // Auto-download each generated image
-          const filename = imageKey === 'cover' ? 'cover.jpg' : `${imageKey.replace('spread-', '')}-spread.jpg`
-          try {
-            await downloadImage(imageUrl, filename)
-          } catch (error) {
-            console.error('Download error:', error)
-          }
         }
       )
 
-      // Generation complete
-      setGeneratedImages(generated)
+      const coverInfo = { url: coverUrl, generatedAt: new Date().toISOString(), downloaded: true }
+      setGeneratedImages(prev => {
+        const next = { ...prev, cover: coverInfo }
+        saveToIndexedDB('generatedImages', next)
+        return next
+      })
+      setGenerationProgress(prev => ({
+        ...prev,
+        current: 1,
+        status: { ...prev.status, cover: 'complete' }
+      }))
+      try { await downloadImage(coverUrl, 'cover.jpg') } catch (e) { console.error('Download error:', e) }
+
+      // Generate Spread 1
+      const leftPage = extractedPages['1-left']
+      const rightPage = extractedPages['1-right']
+      if (!leftPage || !rightPage) throw new Error('Missing pages for spread 1')
+
+      setGenerationProgress(prev => ({
+        ...prev,
+        status: { ...prev.status, 'spread-1': 'generating' }
+      }))
+
+      const spread1Url = await generateImageWithRetry(
+        PROMPT_2_FIRST_INTERIOR,
+        {
+          reference_image: coverUrl,
+          left_page_image: leftPage.base64,
+          right_page_image: rightPage.base64
+        },
+        (attempt, max) => {
+          setGenerationProgress(prev => ({
+            ...prev,
+            status: { ...prev.status, 'spread-1': `retrying (${attempt}/${max})` }
+          }))
+        }
+      )
+
+      const spread1Info = { url: spread1Url, generatedAt: new Date().toISOString(), downloaded: true }
+      setGeneratedImages(prev => {
+        const next = { ...prev, 'spread-1': spread1Info }
+        saveToIndexedDB('generatedImages', next)
+        return next
+      })
+      setGenerationProgress(prev => ({
+        ...prev,
+        current: 2,
+        status: { ...prev.status, 'spread-1': 'complete' }
+      }))
+      try { await downloadImage(spread1Url, '1-spread.jpg') } catch (e) { console.error('Download error:', e) }
+
+      // Pause for review
       setIsGenerating(false)
-      setCurrentPhase('complete')
+      setCurrentPhase('review')
     } catch (error) {
       console.error('Generation error:', error)
       alert('Failed to generate images. Please check your API key and try again.')
@@ -148,14 +193,84 @@ function App() {
     }
   }
 
-  function handleGenerationComplete(images) {
-    setGeneratedImages(images)
-    setIsGenerating(false)
-    setCurrentPhase('complete')
-  }
+  async function handleContinueGeneration() {
+    // Step 2: Generate remaining spreads using spread-1 as reference
+    setCurrentPhase('generating-remaining')
+    setIsGenerating(true)
 
-  function handleGenerationProgress(progress) {
-    setGenerationProgress(progress)
+    const spreadCount = Math.floor((Object.keys(extractedPages).length - 1) / 2)
+    const spread1Url = generatedImages['spread-1']?.url
+    if (!spread1Url) {
+      alert('Spread 1 image not found. Please regenerate it first.')
+      setIsGenerating(false)
+      setCurrentPhase('review')
+      return
+    }
+
+    try {
+      const promises = []
+      for (let i = 2; i <= spreadCount; i++) {
+        const leftPage = extractedPages[`${i}-left`]
+        const rightPage = extractedPages[`${i}-right`]
+        if (leftPage && rightPage) {
+          promises.push(
+            (async () => {
+              const spreadKey = `spread-${i}`
+              setGenerationProgress(prev => ({
+                ...prev,
+                status: { ...prev.status, [spreadKey]: 'generating' }
+              }))
+
+              try {
+                const spreadUrl = await generateImageWithRetry(
+                  PROMPT_3_REMAINING_INTERIORS,
+                  {
+                    reference_image: spread1Url,
+                    left_page_image: leftPage.base64,
+                    right_page_image: rightPage.base64
+                  },
+                  (attempt, max) => {
+                    setGenerationProgress(prev => ({
+                      ...prev,
+                      status: { ...prev.status, [spreadKey]: `retrying (${attempt}/${max})` }
+                    }))
+                  }
+                )
+
+                const spreadInfo = { url: spreadUrl, generatedAt: new Date().toISOString(), downloaded: true }
+                setGeneratedImages(prev => {
+                  const next = { ...prev, [spreadKey]: spreadInfo }
+                  saveToIndexedDB('generatedImages', next)
+                  return next
+                })
+                setGenerationProgress(prev => ({
+                  ...prev,
+                  current: prev.current + 1,
+                  status: { ...prev.status, [spreadKey]: 'complete' }
+                }))
+
+                const filename = `${i}-spread.jpg`
+                try { await downloadImage(spreadUrl, filename) } catch (e) { console.error('Download error:', e) }
+              } catch (error) {
+                console.error(`Spread ${i} generation error:`, error)
+                setGenerationProgress(prev => ({
+                  ...prev,
+                  status: { ...prev.status, [spreadKey]: 'failed' }
+                }))
+              }
+            })()
+          )
+        }
+      }
+
+      await Promise.all(promises)
+      setIsGenerating(false)
+      setCurrentPhase('complete')
+    } catch (error) {
+      console.error('Generation error:', error)
+      alert('Failed to generate remaining images.')
+      setIsGenerating(false)
+    }
   }
 
   async function handleStartVideoGeneration() {
@@ -521,15 +636,17 @@ function App() {
         />
       )}
 
-      {(currentPhase === 'generating' || currentPhase === 'complete') && (
+      {(currentPhase === 'generating' || currentPhase === 'review' || currentPhase === 'generating-remaining' || currentPhase === 'complete') && (
         <GenerationDashboard
           generatedImages={generatedImages}
           isGenerating={isGenerating}
           progress={generationProgress}
+          currentPhase={currentPhase}
           onUploadNew={handleUploadNew}
           onStartVideoGeneration={handleStartVideoGeneration}
           onRegenerateImage={handleRegenerateImage}
           onGenerateSingleVideo={handleGenerateSingleVideo}
+          onContinueGeneration={handleContinueGeneration}
         />
       )}
 
